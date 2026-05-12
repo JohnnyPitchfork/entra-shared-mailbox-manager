@@ -143,7 +143,7 @@ sequenceDiagram
     App->>Graph: GET central-config.json<br/>(SharePoint via Drive API)
     Graph-->>App: Central config JSON
 
-    App->>App: Merge configs;<br/>intersect user groups<br/>with role mappings;<br/>compute allowed scopes
+    App->>App: Merge configs.<br/>Intersect user groups<br/>with role mappings.<br/>Compute allowed scopes.
 
     App->>EXO: Connect-ExchangeOnline<br/>(delegated, user context)
     EXO-->>App: Connected
@@ -259,7 +259,7 @@ flowchart TD
     CentralUrl -- No --> UseBootstrap[Use bootstrap only<br/>Pattern B]
     CentralUrl -- Yes --> Auth[Acquire Graph token]
     Auth --> Fetch[GET central-config.json<br/>via SharePoint Drive API]
-    Fetch -- Success --> Merge[Merge: central overrides<br/>bootstrap operational keys;<br/>bootstrap retains identity keys]
+    Fetch -- Success --> Merge["Merge: central overrides<br/>bootstrap operational keys.<br/>Bootstrap retains identity keys."]
     Fetch -- Failure --> Cache{Cached central<br/>config exists?}
     Cache -- Yes --> UseCache[Use cached central config<br/>+ bootstrap]
     Cache -- No --> Degrade[Use bootstrap only<br/>+ user-visible warning]
