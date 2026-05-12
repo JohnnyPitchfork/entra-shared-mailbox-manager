@@ -55,7 +55,7 @@ The complete reasoning, the Exchange RBAC setup, the authentication flow, and th
 | **B — Intune, static config** | Enterprise without SharePoint hosting | ~20 min, one-time | Redeploy via Intune |
 | **C — Solo / manual install** | Individual admins, evaluation, contributors | ~5 min | First-run wizard or local JSON edit |
 
-All three patterns are produced from the same artifacts. The deploying administrator runs the **Config Builder** companion app once per tenant, picks a pattern, and receives a tenant-specific deployment kit (PowerShell scripts, JSON configs, and a Markdown walkthrough). Full instructions will live in `docs/Setup.md` once the tool is built.
+All three patterns are produced from the same artifacts. The deploying administrator runs the **Config Builder** companion app once per tenant, picks a pattern, and receives a tenant-specific deployment kit (PowerShell scripts, JSON configs, and a Markdown walkthrough). Full step-by-step instructions are in [`docs/Setup.md`](docs/Setup.md).
 
 ## Quickstart for evaluators
 
@@ -76,7 +76,7 @@ The intended flow once releases are available:
 
 ## Quickstart for administrators (deploy to a team)
 
-> *(Available once the first release is published. The full procedure will be in `docs/Setup.md`.)*
+> *(Available once the first release is published. The full step-by-step procedure is in [`docs/Setup.md`](docs/Setup.md).)*
 
 Anticipated high-level steps for Pattern A:
 
@@ -101,7 +101,8 @@ entra-shared-mailbox-manager/
 │   ├── Architecture.md       Design source-of-truth: security model,
 │   │                         config architecture, deployment patterns,
 │   │                         component layout, references.
-│   └── Setup.md              Forthcoming: admin deployment runbook.
+│   └── Setup.md              Admin deployment runbook (Patterns A/B/C,
+│                             RBAC setup, troubleshooting, uninstall).
 ├── legacy/
 │   ├── shared-mailbox-manager.ps1   The v1 PowerShell script this product
 │   │                                replaces (preserved for historical

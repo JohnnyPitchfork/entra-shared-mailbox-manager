@@ -6,7 +6,7 @@
 
 ## 1. Purpose of this document
 
-This document captures *why* the tool is built the way it is — the decisions, the trade-offs, the things considered and rejected. It is **not** a user manual (see [`../README.md`](../README.md)) and **not** a deployment runbook (see `Setup.md`, forthcoming). It is the durable record of architectural intent. When future contributors ask "why did you do it that way?", this document is the answer.
+This document captures *why* the tool is built the way it is — the decisions, the trade-offs, the things considered and rejected. It is **not** a user manual (see [`../README.md`](../README.md)) and **not** a deployment runbook (see [`Setup.md`](Setup.md)). It is the durable record of architectural intent. When future contributors ask "why did you do it that way?", this document is the answer.
 
 ---
 
