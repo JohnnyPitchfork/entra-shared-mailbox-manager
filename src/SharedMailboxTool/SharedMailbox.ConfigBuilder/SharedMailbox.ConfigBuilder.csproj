@@ -20,4 +20,10 @@
     <ProjectReference Include="..\SharedMailbox.Core\SharedMailbox.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Output\" />
+    <Folder Include="ViewModels\" />
+    <Folder Include="Views\" />
+  </ItemGroup>
+
 </Project>

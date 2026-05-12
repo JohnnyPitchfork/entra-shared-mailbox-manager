@@ -27,4 +27,10 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Core\" />
+    <Folder Include="_fixtures\" />
+    <Folder Include="PowerShell\" />
+  </ItemGroup>
+
 </Project>

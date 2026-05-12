@@ -25,4 +25,13 @@
     <ProjectReference Include="..\SharedMailbox.PowerShell\SharedMailbox.PowerShell.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Authentication\" />
+    <Folder Include="Configuration\" />
+    <Folder Include="Logging\" />
+    <Folder Include="Services\" />
+    <Folder Include="ViewModels\" />
+    <Folder Include="Views\" />
+  </ItemGroup>
+
 </Project>

@@ -15,4 +15,9 @@
     <ProjectReference Include="..\SharedMailbox.Core\SharedMailbox.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Hosting\" />
+    <Folder Include="Adapters\" />
+  </ItemGroup>
+
 </Project>
