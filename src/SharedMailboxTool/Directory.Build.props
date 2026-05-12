@@ -1,0 +1,28 @@
+<Project>
+
+  <!--
+    Solution-wide MSBuild properties. Picked up automatically by every
+    project under this directory.
+
+    Purpose: redirect build outputs (bin/, obj/, publish/) to a shorter
+    path at the repo root. The Microsoft.PowerShell.SDK package fans out
+    deep nested runtime folders (runtimes/<rid>/lib/<tfm>/Modules/...)
+    which, combined with default bin/Debug/<tfm>/ paths and our nested
+    src/SharedMailboxTool/<project>/ layout, can exceed Windows'
+    260-character MAX_PATH limit during build copy operations.
+
+    Using ArtifactsPath (introduced in .NET SDK 8.0.200) collapses the
+    build output to .artifacts/ at the repo root, shaving ~40 characters
+    off every output path and keeping us comfortably under MAX_PATH on
+    any Windows machine — no long-path registry tweak required.
+
+    See https://learn.microsoft.com/en-us/dotnet/core/sdk/artifacts-output
+    for the artifacts-output layout reference.
+  -->
+
+  <PropertyGroup>
+    <!-- Repo root is two levels up from this file (src/SharedMailboxTool/) -->
+    <ArtifactsPath>$(MSBuildThisFileDirectory)..\..\.artifacts</ArtifactsPath>
+  </PropertyGroup>
+
+</Project>
