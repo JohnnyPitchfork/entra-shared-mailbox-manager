@@ -1,57 +1,144 @@
-<Window x:Class="SharedMailbox.App.MainWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:SharedMailbox.App"
-        mc:Ignorable="d"
-        Title="SharedMail Tool — placeholder"
-        Height="320" Width="560"
-        WindowStartupLocation="CenterScreen">
+<ui:FluentWindow x:Class="SharedMailbox.App.MainWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:local="clr-namespace:SharedMailbox.App"
+                 mc:Ignorable="d"
+                 Title="SharedMail Tool"
+                 Height="640" Width="980"
+                 MinHeight="520" MinWidth="820"
+                 WindowStartupLocation="CenterScreen">
     <!--
-        Placeholder shell so we can smoke-test the auth + PS host stack end-to-end.
-        Real views (mailbox picker, audit grid, cleanup confirmation, bulk-grant
-        importer) replace the body of this window in the next phase.
+        Layout: outer 2-row Grid (content + error infobar). Top row is a 2-column
+        Grid: sidebar (280) for sign-in + group picker, right pane for the three
+        flow tabs. Tab content is placeholder text; batches 5–7 swap in real views.
+
+        DataContext is set in code-behind from the DI-resolved MainViewModel.
     -->
-    <Grid Margin="24">
+    <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0"
-                   Text="SharedMail Tool"
-                   FontSize="22"
-                   FontWeight="SemiBold"
-                   Margin="0,0,0,4"/>
+        <!-- ============================================================
+             Top row: sidebar + tabs
+             ============================================================ -->
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="280"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
 
-        <TextBlock Grid.Row="1"
-                   x:Name="StatusText"
-                   Text="Not signed in."
-                   FontSize="14"
-                   Foreground="#444"
-                   Margin="0,0,0,20"/>
+            <!-- ===== Sidebar ===== -->
+            <Border Grid.Column="0"
+                    BorderBrush="#1F000000"
+                    BorderThickness="0,0,1,0">
+                <DockPanel Margin="16">
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal">
-            <Button x:Name="SignInButton"
-                    Content="Sign in"
-                    Width="120" Height="32"
-                    Click="SignInButton_Click"/>
-            <Button x:Name="SignOutButton"
-                    Content="Sign out"
-                    Width="120" Height="32"
-                    Margin="12,0,0,0"
-                    IsEnabled="False"
-                    Click="SignOutButton_Click"/>
-        </StackPanel>
+                    <!-- Top block: app title + connection status + sign-in buttons -->
+                    <StackPanel DockPanel.Dock="Top">
+                        <TextBlock Text="SharedMail Tool"
+                                   FontSize="20"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding StatusText}"
+                                   Margin="0,8,0,0"
+                                   TextWrapping="Wrap"
+                                   Foreground="#666"/>
 
-        <TextBlock Grid.Row="3"
-                   x:Name="ErrorText"
-                   Foreground="#B00020"
-                   TextWrapping="Wrap"
-                   Margin="0,20,0,0"
-                   Visibility="Collapsed"/>
+                        <ui:Button Content="Sign in"
+                                   Command="{Binding SignInCommand}"
+                                   Appearance="Primary"
+                                   HorizontalAlignment="Stretch"
+                                   Margin="0,12,0,0"/>
+                        <ui:Button Content="Sign out"
+                                   Command="{Binding SignOutCommand}"
+                                   HorizontalAlignment="Stretch"
+                                   Margin="0,4,0,0"/>
+                    </StackPanel>
+
+                    <!-- Middle block: group picker -->
+                    <StackPanel>
+                        <TextBlock Text="SharedMail- group"
+                                   FontWeight="SemiBold"
+                                   Margin="0,24,0,8"/>
+
+                        <ListBox ItemsSource="{Binding GroupPicker.Groups}"
+                                 SelectedItem="{Binding GroupPicker.SelectedGroup}"
+                                 DisplayMemberPath="Name"
+                                 Height="180"
+                                 BorderThickness="1"/>
+
+                        <TextBlock Text="Or add a custom group ID:"
+                                   Margin="0,16,0,4"
+                                   Foreground="#666"/>
+
+                        <ui:TextBox Text="{Binding GroupPicker.CustomGroupIdText, UpdateSourceTrigger=PropertyChanged}"
+                                    PlaceholderText="00000000-0000-0000-0000-000000000000"/>
+
+                        <ui:Button Content="Add custom group"
+                                   Command="{Binding GroupPicker.AddCustomGroupCommand}"
+                                   HorizontalAlignment="Stretch"
+                                   Margin="0,6,0,0"/>
+
+                        <TextBlock Text="{Binding GroupPicker.CustomGroupError}"
+                                   Foreground="#B00020"
+                                   TextWrapping="Wrap"
+                                   Margin="0,4,0,0"/>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+
+            <!-- ===== Right pane: tabs ===== -->
+            <TabControl Grid.Column="1"
+                        Margin="0"
+                        BorderThickness="0"
+                        Padding="0">
+                <TabItem Header="Audit">
+                    <Grid Background="Transparent">
+                        <TextBlock Text="Audit view — coming in batch 5"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Foreground="#888"
+                                   FontSize="16"/>
+                    </Grid>
+                </TabItem>
+
+                <TabItem Header="Cleanup">
+                    <Grid Background="Transparent">
+                        <TextBlock Text="Cleanup view — coming in batch 6"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Foreground="#888"
+                                   FontSize="16"/>
+                    </Grid>
+                </TabItem>
+
+                <TabItem Header="Bulk Grant">
+                    <Grid Background="Transparent">
+                        <TextBlock Text="Bulk Grant view — coming in batch 7"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Foreground="#888"
+                                   FontSize="16"/>
+                    </Grid>
+                </TabItem>
+            </TabControl>
+        </Grid>
+
+        <!-- ============================================================
+             Bottom row: error InfoBar
+             IsOpen is two-way so the user dismissing the bar clears
+             MainViewModel.HasError as a side effect.
+             ============================================================ -->
+        <ui:InfoBar Grid.Row="1"
+                    Severity="Error"
+                    Title="Error"
+                    Message="{Binding ErrorMessage}"
+                    IsOpen="{Binding HasError, Mode=TwoWay}"
+                    IsClosable="True"
+                    Margin="16,8"/>
     </Grid>
-</Window>
+</ui:FluentWindow>
