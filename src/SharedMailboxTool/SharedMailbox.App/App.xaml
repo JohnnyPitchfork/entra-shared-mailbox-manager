@@ -1,9 +1,13 @@
 ﻿<Application x:Class="SharedMailbox.App.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:SharedMailbox.App"
-             StartupUri="MainWindow.xaml">
+             xmlns:local="clr-namespace:SharedMailbox.App">
+    <!--
+        StartupUri intentionally removed. App.xaml.cs builds the Generic Host
+        first (so DI / config / logging are ready) and then resolves MainWindow
+        from the service provider and shows it explicitly.
+    -->
     <Application.Resources>
-         
+
     </Application.Resources>
 </Application>

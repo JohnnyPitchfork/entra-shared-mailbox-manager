@@ -1,12 +1,57 @@
-﻿<Window x:Class="SharedMailbox.App.MainWindow"
+<Window x:Class="SharedMailbox.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:SharedMailbox.App"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        Title="SharedMail Tool — placeholder"
+        Height="320" Width="560"
+        WindowStartupLocation="CenterScreen">
+    <!--
+        Placeholder shell so we can smoke-test the auth + PS host stack end-to-end.
+        Real views (mailbox picker, audit grid, cleanup confirmation, bulk-grant
+        importer) replace the body of this window in the next phase.
+    -->
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
+        <TextBlock Grid.Row="0"
+                   Text="SharedMail Tool"
+                   FontSize="22"
+                   FontWeight="SemiBold"
+                   Margin="0,0,0,4"/>
+
+        <TextBlock Grid.Row="1"
+                   x:Name="StatusText"
+                   Text="Not signed in."
+                   FontSize="14"
+                   Foreground="#444"
+                   Margin="0,0,0,20"/>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal">
+            <Button x:Name="SignInButton"
+                    Content="Sign in"
+                    Width="120" Height="32"
+                    Click="SignInButton_Click"/>
+            <Button x:Name="SignOutButton"
+                    Content="Sign out"
+                    Width="120" Height="32"
+                    Margin="12,0,0,0"
+                    IsEnabled="False"
+                    Click="SignOutButton_Click"/>
+        </StackPanel>
+
+        <TextBlock Grid.Row="3"
+                   x:Name="ErrorText"
+                   Foreground="#B00020"
+                   TextWrapping="Wrap"
+                   Margin="0,20,0,0"
+                   Visibility="Collapsed"/>
     </Grid>
 </Window>
