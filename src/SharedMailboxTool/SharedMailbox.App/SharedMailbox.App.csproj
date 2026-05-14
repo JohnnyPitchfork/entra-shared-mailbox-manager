@@ -17,12 +17,21 @@
     <PackageReference Include="Microsoft.Identity.Client" Version="4.84.0" />
     <PackageReference Include="Serilog" Version="4.3.1" />
     <PackageReference Include="Serilog.Extensions.Hosting" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.Debug" Version="3.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\SharedMailbox.Core\SharedMailbox.Core.csproj" />
     <ProjectReference Include="..\SharedMailbox.PowerShell\SharedMailbox.PowerShell.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Ensure appsettings.json ships next to the built executable so JsonConfigProvider
+         can locate it at AppContext.BaseDirectory. -->
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>
