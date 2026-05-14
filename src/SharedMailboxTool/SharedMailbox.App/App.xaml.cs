@@ -6,6 +6,7 @@ using Serilog;
 using SharedMailbox.App.Authentication;
 using SharedMailbox.App.Configuration;
 using SharedMailbox.App.Logging;
+using SharedMailbox.App.ViewModels;
 using SharedMailbox.Core.Configuration;
 using SharedMailbox.Core.Services;
 using SharedMailbox.PowerShell.Adapters;
@@ -153,6 +154,11 @@ public partial class App : Application
         // Core utilities.
         services.AddSingleton<IAuditLogWriter, CsvAuditLogWriter>();
         services.AddSingleton<IUpnImportReader, UpnImportReader>();
+
+        // View models. Singletons so navigating away from a tab doesn't lose state
+        // and so the group picker is shared across every flow.
+        services.AddSingleton<GroupPickerViewModel>();
+        services.AddSingleton<MainViewModel>();
 
         // The main window. Singleton because there is exactly one for the app's lifetime.
         services.AddSingleton<MainWindow>();
