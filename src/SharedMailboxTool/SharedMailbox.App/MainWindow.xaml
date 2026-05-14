@@ -5,6 +5,7 @@
                  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  xmlns:local="clr-namespace:SharedMailbox.App"
+                 xmlns:views="clr-namespace:SharedMailbox.App.Views"
                  mc:Ignorable="d"
                  Title="SharedMail Tool"
                  Height="640" Width="980"
@@ -97,13 +98,7 @@
                         BorderThickness="0"
                         Padding="0">
                 <TabItem Header="Audit">
-                    <Grid Background="Transparent">
-                        <TextBlock Text="Audit view — coming in batch 5"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   Foreground="#888"
-                                   FontSize="16"/>
-                    </Grid>
+                    <views:AuditView DataContext="{Binding Audit}"/>
                 </TabItem>
 
                 <TabItem Header="Cleanup">

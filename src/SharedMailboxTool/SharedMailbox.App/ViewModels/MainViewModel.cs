@@ -23,17 +23,22 @@ public sealed partial class MainViewModel : ObservableObject
     public MainViewModel(
         IConnectionService connectionService,
         GroupPickerViewModel groupPicker,
+        AuditViewModel audit,
         ILogger<MainViewModel> logger)
     {
         _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         GroupPicker = groupPicker ?? throw new ArgumentNullException(nameof(groupPicker));
+        Audit = audit ?? throw new ArgumentNullException(nameof(audit));
 
         _connectionService.StatusChanged += OnConnectionStatusChanged;
         SyncStatus(_connectionService.Status);
     }
 
     public GroupPickerViewModel GroupPicker { get; }
+
+    /// <summary>Audit-tab view model. Bound by MainWindow.xaml to the Audit tab's content.</summary>
+    public AuditViewModel Audit { get; }
 
     [ObservableProperty]
     private string _statusText = "Not signed in.";

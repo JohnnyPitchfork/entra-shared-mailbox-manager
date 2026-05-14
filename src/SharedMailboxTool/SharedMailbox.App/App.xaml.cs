@@ -158,6 +158,7 @@ public partial class App : Application
         // View models. Singletons so navigating away from a tab doesn't lose state
         // and so the group picker is shared across every flow.
         services.AddSingleton<GroupPickerViewModel>();
+        services.AddSingleton<AuditViewModel>();
         services.AddSingleton<MainViewModel>();
 
         // The main window. Singleton because there is exactly one for the app's lifetime.
