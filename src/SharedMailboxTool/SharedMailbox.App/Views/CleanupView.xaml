@@ -1,0 +1,163 @@
+<UserControl x:Class="SharedMailbox.App.Views.CleanupView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             mc:Ignorable="d"
+             d:DesignHeight="700" d:DesignWidth="720">
+    <!--
+        Cleanup tab content. Same shape as AuditView (scope picker, IncludeSendAs,
+        run/cancel, results grid) plus three differences:
+          * DataGrid has a checkbox column bound to each row's IsSelected.
+          * Action bar under the grid: Select all blocked / Clear / Remove selected.
+          * Remove selected opens a modal confirmation via ICleanupConfirmationService;
+            no Remove-* runs until the user clicks "Remove permissions" in the dialog.
+
+        DataContext is set by the parent (MainWindow) via DataContext="{Binding Cleanup}".
+    -->
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+    </UserControl.Resources>
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,16">
+            <TextBlock Text="Cleanup blocked delegates"
+                       FontSize="20"
+                       FontWeight="SemiBold"/>
+            <TextBlock TextWrapping="Wrap"
+                       Foreground="#666"
+                       Margin="0,4,0,0"
+                       Text="Audit the selected scope, then revoke FullAccess / SendAs / SendOnBehalf for any trustee whose Entra sign-in is blocked. Removal is gated by a confirmation modal — no cmdlets run until you confirm."/>
+        </StackPanel>
+
+        <!-- Scope + options -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,16">
+            <TextBlock Text="Scope" FontWeight="SemiBold" Margin="0,0,0,4"/>
+
+            <RadioButton GroupName="CleanupScope"
+                         Content="All shared mailboxes in the selected group"
+                         IsChecked="{Binding IsAllInGroupScope, Mode=TwoWay}"
+                         Margin="0,2"/>
+            <RadioButton GroupName="CleanupScope"
+                         Content="Single mailbox"
+                         IsChecked="{Binding IsSingleMailboxScope, Mode=TwoWay}"
+                         Margin="0,2"/>
+
+            <ComboBox ItemsSource="{Binding AvailableMailboxes}"
+                      SelectedItem="{Binding SelectedMailbox}"
+                      DisplayMemberPath="UserPrincipalName"
+                      Margin="22,4,0,0"
+                      HorizontalAlignment="Left"
+                      MinWidth="320"
+                      Visibility="{Binding IsSingleMailboxScope, Converter={StaticResource BoolToVisibility}}"/>
+
+            <CheckBox Content="Include SendAs permissions"
+                      IsChecked="{Binding IncludeSendAs}"
+                      Margin="0,16,0,0"/>
+        </StackPanel>
+
+        <!-- Run / Cancel + progress -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,16">
+            <ui:Button Content="Run audit"
+                       Command="{Binding RunAuditCommand}"
+                       Appearance="Primary"
+                       Width="140" Height="36"/>
+
+            <ui:Button Content="Cancel"
+                       Command="{Binding RunAuditCancelCommand}"
+                       Width="100" Height="36"
+                       Margin="8,0,0,0"
+                       Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibility}}"/>
+
+            <ProgressBar Value="{Binding Progress, Mode=OneWay}"
+                         Maximum="1"
+                         Width="220" Height="6"
+                         VerticalAlignment="Center"
+                         Margin="16,0,0,0"
+                         Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibility}}"/>
+
+            <TextBlock Text="{Binding ProgressStatus}"
+                       VerticalAlignment="Center"
+                       Foreground="#666"
+                       Margin="12,0,0,0"
+                       TextTrimming="CharacterEllipsis"/>
+        </StackPanel>
+
+        <!-- Results grid with checkbox column -->
+        <DataGrid Grid.Row="3"
+                  ItemsSource="{Binding Rows}"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  GridLinesVisibility="Horizontal"
+                  HeadersVisibility="Column"
+                  RowHeight="28"
+                  AlternatingRowBackground="#F7F7F7">
+            <DataGrid.Columns>
+                <DataGridCheckBoxColumn Header=""
+                                        Binding="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                        Width="40"/>
+                <DataGridTextColumn Header="Mailbox"      Binding="{Binding Report.Mailbox}"      Width="2*" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Trustee"      Binding="{Binding Report.Trustee}"      Width="2*" IsReadOnly="True"/>
+                <DataGridTextColumn Header="Display name" Binding="{Binding Report.DisplayName}"  Width="2*" IsReadOnly="True"/>
+                <DataGridCheckBoxColumn Header="Blocked"      Binding="{Binding Report.SignInBlocked}"  Width="80"  IsReadOnly="True"/>
+                <DataGridCheckBoxColumn Header="FullAccess"   Binding="{Binding Report.FullAccess}"     Width="90"  IsReadOnly="True"/>
+                <DataGridCheckBoxColumn Header="SendAs"       Binding="{Binding Report.SendAs}"         Width="80"  IsReadOnly="True"/>
+                <DataGridCheckBoxColumn Header="SendOnBehalf" Binding="{Binding Report.SendOnBehalf}"   Width="110" IsReadOnly="True"/>
+                <DataGridTextColumn     Header="Lookup"       Binding="{Binding Report.LookupStatus}"   Width="110" IsReadOnly="True"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Action bar under the grid -->
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,12,0,0">
+            <ui:Button Content="Select all blocked"
+                       Command="{Binding SelectAllBlockedCommand}"
+                       Padding="12,4"/>
+            <ui:Button Content="Clear selection"
+                       Command="{Binding ClearSelectionCommand}"
+                       Padding="12,4"
+                       Margin="8,0,0,0"/>
+
+            <TextBlock Text="{Binding SelectedCount, StringFormat='{}{0} selected'}"
+                       VerticalAlignment="Center"
+                       Foreground="#666"
+                       Margin="16,0,0,0"/>
+
+            <ui:Button Content="Remove selected"
+                       Command="{Binding RemoveSelectedCommand}"
+                       Appearance="Danger"
+                       Padding="14,4"
+                       Margin="16,0,0,0"/>
+        </StackPanel>
+
+        <!-- Export footer -->
+        <StackPanel Grid.Row="5"
+                    Orientation="Horizontal"
+                    Margin="0,12,0,0"
+                    Visibility="{Binding HasExportPath, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock Text="Cleanup log:"
+                       Foreground="#666"
+                       VerticalAlignment="Center"
+                       Margin="0,0,8,0"/>
+            <TextBlock Text="{Binding LastExportPath}"
+                       VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis"
+                       MaxWidth="500"
+                       Margin="0,0,12,0"/>
+            <ui:Button Content="Open folder"
+                       Command="{Binding OpenExportFolderCommand}"
+                       Padding="10,4"/>
+        </StackPanel>
+    </Grid>
+</UserControl>

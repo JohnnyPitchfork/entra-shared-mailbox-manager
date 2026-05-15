@@ -6,6 +6,7 @@ using Serilog;
 using SharedMailbox.App.Authentication;
 using SharedMailbox.App.Configuration;
 using SharedMailbox.App.Logging;
+using SharedMailbox.App.Services;
 using SharedMailbox.App.ViewModels;
 using SharedMailbox.Core.Configuration;
 using SharedMailbox.Core.Services;
@@ -155,10 +156,15 @@ public partial class App : Application
         services.AddSingleton<IAuditLogWriter, CsvAuditLogWriter>();
         services.AddSingleton<IUpnImportReader, UpnImportReader>();
 
+        // App-layer services. ICleanupConfirmationService owns the modal-dialog lifecycle
+        // and is consumed by CleanupViewModel; keeps the VM free of UI types.
+        services.AddSingleton<ICleanupConfirmationService, CleanupConfirmationService>();
+
         // View models. Singletons so navigating away from a tab doesn't lose state
         // and so the group picker is shared across every flow.
         services.AddSingleton<GroupPickerViewModel>();
         services.AddSingleton<AuditViewModel>();
+        services.AddSingleton<CleanupViewModel>();
         services.AddSingleton<MainViewModel>();
 
         // The main window. Singleton because there is exactly one for the app's lifetime.

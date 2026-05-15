@@ -102,13 +102,7 @@
                 </TabItem>
 
                 <TabItem Header="Cleanup">
-                    <Grid Background="Transparent">
-                        <TextBlock Text="Cleanup view — coming in batch 6"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   Foreground="#888"
-                                   FontSize="16"/>
-                    </Grid>
+                    <views:CleanupView DataContext="{Binding Cleanup}"/>
                 </TabItem>
 
                 <TabItem Header="Bulk Grant">
