@@ -156,15 +156,18 @@ public partial class App : Application
         services.AddSingleton<IAuditLogWriter, CsvAuditLogWriter>();
         services.AddSingleton<IUpnImportReader, UpnImportReader>();
 
-        // App-layer services. ICleanupConfirmationService owns the modal-dialog lifecycle
-        // and is consumed by CleanupViewModel; keeps the VM free of UI types.
+        // App-layer services. The confirmation services own their dialog windows'
+        // lifecycle and are consumed by the destructive flow VMs; this keeps the
+        // VMs free of UI types and makes them unit-testable with a fake.
         services.AddSingleton<ICleanupConfirmationService, CleanupConfirmationService>();
+        services.AddSingleton<IBulkGrantConfirmationService, BulkGrantConfirmationService>();
 
         // View models. Singletons so navigating away from a tab doesn't lose state
         // and so the group picker is shared across every flow.
         services.AddSingleton<GroupPickerViewModel>();
         services.AddSingleton<AuditViewModel>();
         services.AddSingleton<CleanupViewModel>();
+        services.AddSingleton<BulkGrantViewModel>();
         services.AddSingleton<MainViewModel>();
 
         // The main window. Singleton because there is exactly one for the app's lifetime.

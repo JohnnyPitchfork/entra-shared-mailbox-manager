@@ -25,6 +25,7 @@ public sealed partial class MainViewModel : ObservableObject
         GroupPickerViewModel groupPicker,
         AuditViewModel audit,
         CleanupViewModel cleanup,
+        BulkGrantViewModel bulkGrant,
         ILogger<MainViewModel> logger)
     {
         _connectionService = connectionService ?? throw new ArgumentNullException(nameof(connectionService));
@@ -32,6 +33,7 @@ public sealed partial class MainViewModel : ObservableObject
         GroupPicker = groupPicker ?? throw new ArgumentNullException(nameof(groupPicker));
         Audit = audit ?? throw new ArgumentNullException(nameof(audit));
         Cleanup = cleanup ?? throw new ArgumentNullException(nameof(cleanup));
+        BulkGrant = bulkGrant ?? throw new ArgumentNullException(nameof(bulkGrant));
 
         _connectionService.StatusChanged += OnConnectionStatusChanged;
         SyncStatus(_connectionService.Status);
@@ -44,6 +46,9 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Cleanup-tab view model. Bound by MainWindow.xaml to the Cleanup tab's content.</summary>
     public CleanupViewModel Cleanup { get; }
+
+    /// <summary>Bulk-Grant-tab view model. Bound by MainWindow.xaml to the Bulk Grant tab's content.</summary>
+    public BulkGrantViewModel BulkGrant { get; }
 
     [ObservableProperty]
     private string _statusText = "Not signed in.";

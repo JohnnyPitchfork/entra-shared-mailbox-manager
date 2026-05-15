@@ -1,0 +1,79 @@
+<ui:FluentWindow x:Class="SharedMailbox.App.Views.BulkGrantConfirmDialog"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 mc:Ignorable="d"
+                 Title="Confirm bulk grant"
+                 Height="520" Width="780"
+                 MinHeight="360" MinWidth="560"
+                 WindowStartupLocation="CenterOwner"
+                 ShowInTaskbar="False"
+                 ResizeMode="CanResize">
+    <!--
+        Modal confirmation shown by IBulkGrantConfirmationService before any
+        Add-MailboxPermission / Add-RecipientPermission cmdlet fires. Shows the
+        user-list and mailbox-list separately rather than the full cartesian
+        product so we don't drown the user in N×M rows.
+    -->
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,16">
+            <TextBlock Text="{Binding Title}"
+                       FontSize="18"
+                       FontWeight="SemiBold"/>
+            <TextBlock Text="{Binding Subtitle}"
+                       TextWrapping="Wrap"
+                       Foreground="#666"
+                       Margin="0,6,0,0"/>
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <DockPanel Grid.Column="0">
+                <TextBlock Text="{Binding UsersHeader}"
+                           FontWeight="SemiBold"
+                           DockPanel.Dock="Top"
+                           Margin="0,0,0,6"/>
+                <ListBox ItemsSource="{Binding Users}"
+                         BorderThickness="1"
+                         BorderBrush="#DDD"/>
+            </DockPanel>
+
+            <DockPanel Grid.Column="2">
+                <TextBlock Text="{Binding MailboxesHeader}"
+                           FontWeight="SemiBold"
+                           DockPanel.Dock="Top"
+                           Margin="0,0,0,6"/>
+                <ListBox ItemsSource="{Binding Mailboxes}"
+                         BorderThickness="1"
+                         BorderBrush="#DDD"/>
+            </DockPanel>
+        </Grid>
+
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,16,0,0">
+            <ui:Button Content="Cancel"
+                       Click="CancelButton_Click"
+                       Width="110" Height="36"
+                       Margin="0,0,8,0"/>
+            <ui:Button Content="Grant access"
+                       Click="ConfirmButton_Click"
+                       Appearance="Primary"
+                       Width="160" Height="36"/>
+        </StackPanel>
+    </Grid>
+</ui:FluentWindow>

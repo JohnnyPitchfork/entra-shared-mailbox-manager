@@ -106,13 +106,7 @@
                 </TabItem>
 
                 <TabItem Header="Bulk Grant">
-                    <Grid Background="Transparent">
-                        <TextBlock Text="Bulk Grant view — coming in batch 7"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   Foreground="#888"
-                                   FontSize="16"/>
-                    </Grid>
+                    <views:BulkGrantView DataContext="{Binding BulkGrant}"/>
                 </TabItem>
             </TabControl>
         </Grid>

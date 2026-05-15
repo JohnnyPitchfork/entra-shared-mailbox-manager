@@ -1,0 +1,237 @@
+<UserControl x:Class="SharedMailbox.App.Views.BulkGrantView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             mc:Ignorable="d"
+             d:DesignHeight="700" d:DesignWidth="720">
+    <!--
+        Bulk Grant tab content. Two-column input layout (Users on the left, Mailboxes
+        on the right) feeds a single Run command, which gates on a confirmation modal
+        before any Add-MailboxPermission / Add-RecipientPermission cmdlet fires.
+    -->
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+    </UserControl.Resources>
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,16">
+            <TextBlock Text="Grant access in bulk"
+                       FontSize="20"
+                       FontWeight="SemiBold"/>
+            <TextBlock TextWrapping="Wrap"
+                       Foreground="#666"
+                       Margin="0,4,0,0"
+                       Text="Add one or more users to one or more shared mailboxes in the selected group. Permissions already held are skipped. A confirmation modal lists every user × mailbox combination before any cmdlet runs."/>
+        </StackPanel>
+
+        <!-- Two-column inputs: Users | Mailboxes -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="24"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- ===== Users (left) ===== -->
+            <DockPanel Grid.Column="0">
+                <TextBlock DockPanel.Dock="Top"
+                           Text="{Binding UserCount, StringFormat='Users to grant access ({0})'}"
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,6"/>
+
+                <!-- Add by typing -->
+                <Grid DockPanel.Dock="Top" Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <ui:TextBox Grid.Column="0"
+                                Text="{Binding NewUpnText, UpdateSourceTrigger=PropertyChanged}"
+                                PlaceholderText="user@tenant.com">
+                        <ui:TextBox.InputBindings>
+                            <KeyBinding Key="Enter" Command="{Binding AddUpnCommand}"/>
+                        </ui:TextBox.InputBindings>
+                    </ui:TextBox>
+                    <ui:Button Grid.Column="1"
+                               Content="Add"
+                               Command="{Binding AddUpnCommand}"
+                               Margin="6,0,0,0"
+                               Padding="14,0"/>
+                </Grid>
+
+                <!-- CSV import row -->
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
+                    <ui:Button Content="Import from CSV…"
+                               Command="{Binding ImportCsvCommand}"
+                               Padding="12,4"/>
+                    <ui:Button Content="Clear"
+                               Command="{Binding ClearUsersCommand}"
+                               Padding="12,4"
+                               Margin="6,0,0,0"/>
+                </StackPanel>
+
+                <TextBlock DockPanel.Dock="Top"
+                           Text="{Binding ImportStatus}"
+                           Foreground="#666"
+                           Margin="0,2,0,0"
+                           TextWrapping="Wrap"/>
+                <TextBlock DockPanel.Dock="Top"
+                           Text="{Binding ImportError}"
+                           Foreground="#B00020"
+                           Margin="0,2,0,0"
+                           TextWrapping="Wrap"/>
+
+                <!-- UPN list. MaxHeight caps the box so a large import (CSV with
+                     50+ UPNs) doesn't push the results grid off-screen; ListBox's
+                     built-in ScrollViewer takes over once the limit is reached. -->
+                <ListBox ItemsSource="{Binding UserUpns}"
+                         Margin="0,8,0,0"
+                         BorderThickness="1"
+                         BorderBrush="#DDD"
+                         MaxHeight="280"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding}"
+                                           VerticalAlignment="Center"/>
+                                <Button Grid.Column="1"
+                                        Content="×"
+                                        Width="24" Height="24"
+                                        Padding="0"
+                                        ToolTip="Remove"
+                                        Command="{Binding DataContext.RemoveUpnCommand,
+                                                          RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                        CommandParameter="{Binding}"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+
+            <!-- ===== Mailboxes (right) ===== -->
+            <StackPanel Grid.Column="2">
+                <TextBlock Text="Mailbox scope" FontWeight="SemiBold" Margin="0,0,0,6"/>
+
+                <RadioButton GroupName="BulkGrantScope"
+                             Content="All shared mailboxes in the selected group"
+                             IsChecked="{Binding IsAllInGroupScope, Mode=TwoWay}"
+                             Margin="0,2"/>
+                <RadioButton GroupName="BulkGrantScope"
+                             Content="Single mailbox"
+                             IsChecked="{Binding IsSingleMailboxScope, Mode=TwoWay}"
+                             Margin="0,2"/>
+
+                <ComboBox ItemsSource="{Binding AvailableMailboxes}"
+                          SelectedItem="{Binding SelectedMailbox}"
+                          DisplayMemberPath="UserPrincipalName"
+                          Margin="22,4,0,0"
+                          HorizontalAlignment="Stretch"
+                          Visibility="{Binding IsSingleMailboxScope, Converter={StaticResource BoolToVisibility}}"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Options -->
+        <CheckBox Grid.Row="2"
+                  Content="Grant SendAs in addition to FullAccess"
+                  IsChecked="{Binding GrantSendAs}"
+                  Margin="0,16,0,0"/>
+
+        <!-- Run / Cancel + progress. Grid (not StackPanel) so the status TextBlock
+             can occupy a "*" column and wrap long messages instead of being
+             truncated with an ellipsis. -->
+        <Grid Grid.Row="3" Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <ui:Button Grid.Column="0"
+                       Content="Grant access"
+                       Command="{Binding RunCommand}"
+                       Appearance="Primary"
+                       Width="140" Height="36"/>
+
+            <ui:Button Grid.Column="1"
+                       Content="Cancel"
+                       Command="{Binding RunCancelCommand}"
+                       Width="100" Height="36"
+                       Margin="8,0,0,0"
+                       Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibility}}"/>
+
+            <ProgressBar Grid.Column="2"
+                         Value="{Binding Progress, Mode=OneWay}"
+                         Maximum="1"
+                         Width="220" Height="6"
+                         VerticalAlignment="Center"
+                         Margin="16,0,0,0"
+                         Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibility}}"/>
+
+            <TextBlock Grid.Column="3"
+                       Text="{Binding ProgressStatus}"
+                       VerticalAlignment="Center"
+                       Foreground="#666"
+                       Margin="12,0,0,0"
+                       TextWrapping="Wrap"/>
+        </Grid>
+
+        <!-- Results -->
+        <DataGrid Grid.Row="4"
+                  Margin="0,16,0,0"
+                  ItemsSource="{Binding Results}"
+                  AutoGenerateColumns="False"
+                  IsReadOnly="True"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  GridLinesVisibility="Horizontal"
+                  HeadersVisibility="Column"
+                  RowHeight="28"
+                  AlternatingRowBackground="#F7F7F7">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="User"          Binding="{Binding UserUpn}"              Width="*"/>
+                <DataGridTextColumn Header="Mailbox"       Binding="{Binding SharedMailboxAddress}" Width="*"/>
+                <DataGridTextColumn Header="FullAccess"    Binding="{Binding AccessStatusMessage}"  Width="2*"/>
+                <DataGridTextColumn Header="SendAs"        Binding="{Binding SendAsStatusMessage}"  Width="2*"/>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- Export footer -->
+        <StackPanel Grid.Row="5"
+                    Orientation="Horizontal"
+                    Margin="0,12,0,0"
+                    Visibility="{Binding HasExportPath, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock Text="Bulk-action log:"
+                       Foreground="#666"
+                       VerticalAlignment="Center"
+                       Margin="0,0,8,0"/>
+            <TextBlock Text="{Binding LastExportPath}"
+                       VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis"
+                       MaxWidth="500"
+                       Margin="0,0,12,0"/>
+            <ui:Button Content="Open folder"
+                       Command="{Binding OpenExportFolderCommand}"
+                       Padding="10,4"/>
+        </StackPanel>
+    </Grid>
+</UserControl>

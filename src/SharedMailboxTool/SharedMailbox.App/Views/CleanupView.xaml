@@ -67,32 +67,45 @@
                       Margin="0,16,0,0"/>
         </StackPanel>
 
-        <!-- Run / Cancel + progress -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,16">
-            <ui:Button Content="Run audit"
+        <!-- Run / Cancel + progress. Grid (not StackPanel) so the status TextBlock
+             can occupy a "*" column and wrap long messages instead of being
+             truncated with an ellipsis. -->
+        <Grid Grid.Row="2" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <ui:Button Grid.Column="0"
+                       Content="Run audit"
                        Command="{Binding RunAuditCommand}"
                        Appearance="Primary"
                        Width="140" Height="36"/>
 
-            <ui:Button Content="Cancel"
+            <ui:Button Grid.Column="1"
+                       Content="Cancel"
                        Command="{Binding RunAuditCancelCommand}"
                        Width="100" Height="36"
                        Margin="8,0,0,0"
                        Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibility}}"/>
 
-            <ProgressBar Value="{Binding Progress, Mode=OneWay}"
+            <ProgressBar Grid.Column="2"
+                         Value="{Binding Progress, Mode=OneWay}"
                          Maximum="1"
                          Width="220" Height="6"
                          VerticalAlignment="Center"
                          Margin="16,0,0,0"
                          Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibility}}"/>
 
-            <TextBlock Text="{Binding ProgressStatus}"
+            <TextBlock Grid.Column="3"
+                       Text="{Binding ProgressStatus}"
                        VerticalAlignment="Center"
                        Foreground="#666"
                        Margin="12,0,0,0"
-                       TextTrimming="CharacterEllipsis"/>
-        </StackPanel>
+                       TextWrapping="Wrap"/>
+        </Grid>
 
         <!-- Results grid with checkbox column -->
         <DataGrid Grid.Row="3"
