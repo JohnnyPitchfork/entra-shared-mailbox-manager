@@ -136,16 +136,56 @@
                              IsChecked="{Binding IsAllInGroupScope, Mode=TwoWay}"
                              Margin="0,2"/>
                 <RadioButton GroupName="BulkGrantScope"
+                             Content="Select specific mailboxes…"
+                             IsChecked="{Binding IsMultiSelectScope, Mode=TwoWay}"
+                             Margin="0,2"/>
+                <RadioButton GroupName="BulkGrantScope"
                              Content="Single mailbox"
                              IsChecked="{Binding IsSingleMailboxScope, Mode=TwoWay}"
                              Margin="0,2"/>
 
+                <!-- Single-mailbox dropdown (visible only in Single scope) -->
                 <ComboBox ItemsSource="{Binding AvailableMailboxes}"
                           SelectedItem="{Binding SelectedMailbox}"
                           DisplayMemberPath="UserPrincipalName"
                           Margin="22,4,0,0"
                           HorizontalAlignment="Stretch"
                           Visibility="{Binding IsSingleMailboxScope, Converter={StaticResource BoolToVisibility}}"/>
+
+                <!-- Multi-select checklist (visible only in MultiSelect scope) -->
+                <StackPanel Margin="22,4,0,0"
+                            Visibility="{Binding IsMultiSelectScope, Converter={StaticResource BoolToVisibility}}">
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <ui:Button Content="Select all"
+                                   Command="{Binding SelectAllMailboxesCommand}"
+                                   Padding="10,2"/>
+                        <ui:Button Content="Clear"
+                                   Command="{Binding ClearMailboxSelectionCommand}"
+                                   Padding="10,2"
+                                   Margin="6,0,0,0"/>
+                        <TextBlock Text="{Binding SelectedMailboxCount, StringFormat='{}{0} selected'}"
+                                   VerticalAlignment="Center"
+                                   Foreground="#666"
+                                   Margin="12,0,0,0"/>
+                    </StackPanel>
+
+                    <!-- Capped at MaxHeight=280 with internal scrollbar, same pattern as the
+                         user UPN list, so a 30-mailbox group doesn't push the run row off-screen. -->
+                    <ListBox ItemsSource="{Binding MailboxSelectionItems}"
+                             BorderThickness="1"
+                             BorderBrush="#DDD"
+                             MaxHeight="280"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox Content="{Binding UserPrincipalName}"
+                                          IsChecked="{Binding IsSelected, Mode=TwoWay}"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </StackPanel>
             </StackPanel>
         </Grid>
 
