@@ -151,6 +151,10 @@ public partial class App : Application
         services.AddSingleton<IConnectionService, PowerShellConnectionService>();
         services.AddSingleton<IGraphUserLookup, PowerShellGraphUserLookup>();
         services.AddSingleton<ISharedMailboxService, PowerShellSharedMailboxService>();
+        services.AddSingleton<IUserGroupMembershipProvider, PowerShellUserGroupMembershipProvider>();
+
+        // Authorization service (pure logic, lives in Core, consumes IUserGroupMembershipProvider).
+        services.AddSingleton<IUserAuthorizationService, DefaultUserAuthorizationService>();
 
         // Core utilities.
         services.AddSingleton<IAuditLogWriter, CsvAuditLogWriter>();

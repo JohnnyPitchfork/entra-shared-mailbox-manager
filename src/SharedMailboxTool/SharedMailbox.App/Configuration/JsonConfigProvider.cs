@@ -136,6 +136,26 @@ public sealed class JsonConfigProvider : IConfigProvider
                 problems.Add($"KnownGroups[{i}].GroupId is empty or all zeros (name='{g.Name}').");
         }
 
+        // Roles is optional — empty is a valid state (means: no UX-layer filtering).
+        // But if any role IS defined, every field must hold a real value; we don't want
+        // a half-configured role silently denying access to everyone.
+        for (var i = 0; i < config.Roles.Count; i++)
+        {
+            var role = config.Roles[i];
+            if (string.IsNullOrWhiteSpace(role.Name))
+                problems.Add($"Roles[{i}].Name is missing.");
+            if (role.EntraGroupId == PlaceholderGuid)
+                problems.Add($"Roles[{i}].EntraGroupId is empty or all zeros (name='{role.Name}').");
+            if (role.AllowedGroupIds.Count == 0)
+                problems.Add($"Roles[{i}].AllowedGroupIds is empty (name='{role.Name}') - a role with no allowed groups grants no access.");
+
+            for (var j = 0; j < role.AllowedGroupIds.Count; j++)
+            {
+                if (role.AllowedGroupIds[j] == PlaceholderGuid)
+                    problems.Add($"Roles[{i}].AllowedGroupIds[{j}] is empty or all zeros (role='{role.Name}').");
+            }
+        }
+
         if (problems.Count > 0)
         {
             throw new ConfigurationException(

@@ -10,6 +10,16 @@ public sealed class AppConfig
 {
     public AzureAdConfig AzureAd { get; init; } = new();
     public IReadOnlyList<SharedMailGroupConfig> KnownGroups { get; init; } = Array.Empty<SharedMailGroupConfig>();
+
+    /// <summary>
+    /// Optional role-to-scope mapping for tool-side UX filtering (Layer 2 of the
+    /// dual-layer security model). When empty, no filtering is applied and every entry
+    /// in <see cref="KnownGroups"/> is shown to the signed-in user regardless of their
+    /// memberships. When populated, the sidebar shows only the SharedMail- groups the
+    /// user has role-based access to via <see cref="RoleConfig.EntraGroupId"/>.
+    /// </summary>
+    public IReadOnlyList<RoleConfig> Roles { get; init; } = Array.Empty<RoleConfig>();
+
     public LoggingConfig Logging { get; init; } = new();
 }
 

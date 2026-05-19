@@ -11,10 +11,16 @@
                  Height="640" Width="980"
                  MinHeight="520" MinWidth="820"
                  WindowStartupLocation="CenterScreen">
+    <ui:FluentWindow.Resources>
+        <!-- Shared converter for binding bool properties (HasAccessMessage,
+             various Visibility toggles) to Visibility values. -->
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+    </ui:FluentWindow.Resources>
     <!--
         Layout: outer 2-row Grid (content + error infobar). Top row is a 2-column
         Grid: sidebar (280) for sign-in + group picker, right pane for the three
-        flow tabs. Tab content is placeholder text; batches 5–7 swap in real views.
+        flow tabs. The sidebar's group list filters based on the signed-in user's
+        role-to-scope assignments (see GroupPickerViewModel).
 
         DataContext is set in code-behind from the DI-resolved MainViewModel.
     -->
@@ -65,6 +71,17 @@
                         <TextBlock Text="SharedMail- group"
                                    FontWeight="SemiBold"
                                    Margin="0,24,0,8"/>
+
+                        <!-- Access-state message: visible only when the visible group list
+                             is empty for an actionable reason (no role mapping, lookup
+                             failed). When null/empty, the TextBlock collapses and the
+                             ListBox sits flush under the section header. -->
+                        <TextBlock Text="{Binding GroupPicker.AccessMessage}"
+                                   Foreground="#B36B00"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,8"
+                                   Visibility="{Binding GroupPicker.HasAccessMessage,
+                                                        Converter={StaticResource BoolToVisibility}}"/>
 
                         <ListBox ItemsSource="{Binding GroupPicker.Groups}"
                                  SelectedItem="{Binding GroupPicker.SelectedGroup}"
