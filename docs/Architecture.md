@@ -1,6 +1,13 @@
 # Architecture — `entra-shared-mailbox-manager`
 
-> A least-privilege delegation toolkit for Microsoft 365 shared mailboxes. This document is the design source-of-truth for the v2 product — the security model, identity and authorization design, configuration architecture, deployment patterns, and component layout. It is intended to be read by the engineer building the tool, the administrator deploying it, and any reviewer evaluating the design.
+> A least-privilege delegation toolkit for Microsoft 365 shared mailboxes. This document is the design source-of-truth — the security model, identity and authorization design, configuration architecture, deployment patterns, and component layout. It is intended to be read by the engineer building the tool, the administrator deploying it, and any reviewer evaluating the design.
+
+> [!IMPORTANT]
+> **Implementation status.** This document describes the *eventual* design. The v1.0 release ships a deliberate subset — broadly: the three core flows, MSAL authentication, hosted PowerShell adapter, Layer 2 of the security model (tool-side role-to-scope filtering), and Patterns B and C of the deployment model.
+>
+> Features described in this document that are **deferred to later versions** include the Config Builder companion app (v2.0), SharePoint-hosted central configuration / Pattern A (v2.0), operation receipts (v1.1), first-run wizard (v1.1), automated Layer 1 RBAC setup (v1.2), and CustomAttribute1-based scope matching (v1.2).
+>
+> See [`Roadmap.md`](Roadmap.md) for the canonical version-by-version delivery plan. Sections below that describe deferred features carry an inline note pointing back to the roadmap.
 
 ---
 
@@ -69,6 +76,9 @@ The product consists of two installable artifacts and one cloud-hosted configura
 - **The Config Builder companion** (`SharedMailbox.ConfigBuilder`) — a separate WPF tool used once per tenant by the deploying administrator. It guides the admin through Entra app registration, role-to-scope mapping, and SharePoint configuration. It outputs a *deployment kit* (Intune-ready PowerShell script + JSON files + tenant-specific deployment instructions in Markdown). It does **not** rebuild or repackage the main MSIX.
 - **The central configuration file** — a JSON document hosted in a SharePoint Online document library inside the customer's own tenant. It contains the role-to-mailbox-scope mapping that the main app reads at launch. The deploying admin edits this file through SharePoint's web interface; changes propagate to every running instance on next launch.
 
+> [!NOTE]
+> **v1.0 status:** Only the main app ships in v1.0. The Config Builder is a v2.0 deliverable; the SharePoint-hosted central configuration is also v2.0. v1.0 deployments place a per-machine `appsettings.json` directly (Pattern B via Intune script, Pattern C manually) rather than fetching it from SharePoint. See [`Roadmap.md`](Roadmap.md).
+
 ### 4.2 The two security layers
 
 The tool's authorization story is intentionally layered:
@@ -78,6 +88,11 @@ The tool's authorization story is intentionally layered:
 - **Layer 2 — Tool-side UX filtering.** The app reads the same role-to-scope mapping from its configuration and uses it to drive what the user sees. A Project Manager opening the app sees only the mailboxes they are authorized to manage — not an empty list with cryptic permission errors, and not every mailbox in the tenant followed by errors when they click.
 
 Layer 1 is the security boundary. Layer 2 is the user experience. **If the tool's authorization filtering were bypassed (by code modification, by direct PowerShell, by Admin Center), the platform would still refuse the operation.** This is the property that distinguishes a productivity tool from a security tool, and it is the property the design has been built around.
+
+> [!NOTE]
+> **v1.0 status:** Layer 2 is fully implemented in v1.0 via the `Roles` section of `appsettings.json` (see [`Setup.md`](Setup.md) §7.2). Layer 1 in v1.0 is **manual** — the administrator configures Exchange RBAC management scopes by running the PowerShell recipes in [`Setup.md`](Setup.md) §5. Automated Layer 1 setup (`Setup-ExchangeRBAC.ps1`) is a v1.2 deliverable.
+>
+> A v1.0 deployment with only Layer 2 is a productivity layer — a savvy user could in principle bypass the UI filter with direct PowerShell. Adding Layer 1 manually (v1.0–v1.1) or via the v1.2 automation script closes that bypass at the platform level. **For production rollout, deploy both layers.**
 
 ---
 
@@ -232,6 +247,15 @@ The app resolves configuration from a tiered set of locations, with explicit pre
 | 2. Machine-wide bootstrap | `%ProgramData%\SharedMailboxTool\config.json` | Per-device | `TenantId`, `ClientId`, `CentralConfigUrl`, optional Pattern B fallback |
 | 3. Per-user config | `%AppData%\SharedMailboxTool\config.json` | Per-user | UI preferences, last-used group, local override for power users |
 
+> [!NOTE]
+> **v1.0 status:** v1.0 ships a two-tier model with simpler paths:
+> - **Bundled `appsettings.json`** next to the executable — placeholder default that ships with the install package.
+> - **Per-user `appsettings.json`** at `%LOCALAPPDATA%\entra-shared-mailbox-manager\appsettings.json` — the operational data (tenant IDs, KnownGroups, Roles).
+>
+> Optionally, an `appsettings.local.json` next to the executable serves as a developer-machine override (git-ignored).
+>
+> The full three-tier model — including the SharePoint-hosted central config — is a v2.0 deliverable. See [`Setup.md`](Setup.md) §7 for the v1.0 schema and [`Roadmap.md`](Roadmap.md) for the version path.
+
 ### 7.2 Bootstrap vs central — what lives where
 
 Some keys must live in the local bootstrap because the app needs them *before* it can authenticate or fetch anything from the cloud:
@@ -290,6 +314,9 @@ The alternatives were rejected as follows: Azure App Configuration is purpose-bu
 ## 8. Deployment patterns
 
 ### 8.1 Pattern A — Intune + Central (recommended)
+
+> [!NOTE]
+> **v1.0 status:** Pattern A is a v2.0 feature. v1.0 supports Patterns B and C only. The description below remains the design intent. See [`Roadmap.md`](Roadmap.md).
 
 The fully-managed enterprise pattern. The deploying admin:
 
@@ -398,8 +425,11 @@ A non-exhaustive list of the core types the rest of the codebase will be organiz
 The v1 script writes per-operation CSVs to `./Logs/`. The v2 product preserves this contract — the CSV outputs remain, with the same filename patterns (`SharedMail-BulkAction-`, `mailbox-audit-`, `mailbox-cleanup-`) — and adds structured logging alongside it:
 
 - **CSV exports** — same as v1, intended for human inspection and ticket attachments.
-- **Serilog rolling file sink** — JSON-structured, one line per event, suitable for ingestion into a SIEM if the customer wants to forward it. Default path `%LocalAppData%\SharedMailboxTool\logs\app-YYYYMMDD.log`.
+- **Serilog rolling file sink** — text-format in v1.0, one line per event. Default path `%LOCALAPPDATA%\entra-shared-mailbox-manager\Logs\app-YYYYMMDD.log`. Switching the sink to JSON for SIEM ingestion is a one-line config change.
 - **Operation receipts** — for every mutating action, the tool writes a small JSON receipt to a `Receipts/` sibling directory. A receipt captures the user, the operation, the before-state, the after-state, the result, and any failure detail. Receipts are kept for 90 days by default and are the canonical record for "what did I do on Tuesday?" questions.
+
+> [!NOTE]
+> **v1.0 status:** CSV exports and the Serilog rolling file sink are implemented. The operation-receipts feature is **deferred to v1.1** — for v1.0, the CSV log per flow (`mailbox-audit-{ts}.csv`, `mailbox-cleanup-{ts}.csv`, `SharedMail-BulkAction-{ts}.csv`) is the canonical record. See [`Roadmap.md`](Roadmap.md).
 
 The tool does not phone home and emits no telemetry. All logs are local to the workstation that ran the action.
 
@@ -407,17 +437,17 @@ The tool does not phone home and emits no telemetry. All logs are local to the w
 
 ## 12. Known v1 issues addressed in v2
 
-The two pending fixes carried over from the legacy script header:
+The two pending fixes carried over from the legacy script header, and their status in v1.0 of the v2 product:
 
-1. **CSV logs misreport when a UPN does not exist in the tenant.** v2 resolves every trustee UPN against Graph during the **dry-run / preview** phase, before any mutation. Unknown UPNs are surfaced in the UI as warnings and excluded from the apply step. The result log records what was *actually* attempted, with explicit `Skipped: UnknownPrincipal` rows for the unknowns.
+1. **CSV logs misreport when a UPN does not exist in the tenant.** *Partially addressed in v1.0.* The bulk-grant flow runs `Add-MailboxPermission` against the supplied UPN; if the UPN doesn't exist, EXO returns an error that the tool records in the bulk-action CSV's `Access_Status` column as `Failed to grant FullAccess: <error>`. The full **pre-flight Graph resolution** described above (dry-run preview with explicit `Skipped: UnknownPrincipal` rows) is deferred to **v1.1's "operation receipts + preview pane refinement"** roadmap item. The v1.0 confirmation modal that gates every mutation provides a basic preview equivalent.
 
-2. **No pre-flight validation of bulk import.** v2's preview pane is mandatory for bulk operations. The full (user × mailbox × permission) matrix is computed and shown — with diff colouring for "will add", "already present", "would remove" — before the operator can click Apply. Cancelling at this stage performs no writes.
+2. **No pre-flight validation of bulk import.** *Addressed in v1.0.* The bulk-grant flow's confirmation modal lists every (user × mailbox) combination about to be granted *before* any cmdlet fires. Clicking Cancel performs no writes. The full diff-colored preview matrix described above (with "will add" / "already present" / "would remove" annotations) is deferred to **v1.1**.
 
-Additional v1 caveats addressed:
+Additional v1 caveats addressed in v1.0:
 
-- The hardcoded group list is replaced by the central configuration.
-- The lack of tool-side authorization is addressed by the role-to-scope mapping in conjunction with platform Exchange RBAC.
-- The absence of structured logging is addressed by the Serilog sink and receipts directory.
+- The hardcoded group list is replaced by `KnownGroups` in `appsettings.json`. Live-reload from SharePoint is a v2.0 enhancement.
+- The lack of tool-side authorization is addressed in v1.0 by the `Roles` role-to-scope mapping (Layer 2). Platform Exchange RBAC (Layer 1) is configured manually in v1.0 per [`Setup.md`](Setup.md) §5 and is automated in v1.2.
+- The absence of structured logging is addressed by the Serilog rolling file sink (text format in v1.0; the JSON format alternative described in §11 is a one-line config change). The operation-receipts directory is a v1.1 deliverable.
 
 ---
 
@@ -458,4 +488,4 @@ The following are candidates for v2.x or v3, but not in scope for the initial re
 
 ---
 
-*This document is the design source-of-truth. If a code change contradicts this document, the document is updated as part of the same change. If a deployment practice contradicts this document, the document is wrong and is updated; the deployment is left alone.*
+*This document is the design source-of-truth. If a code change contradicts this document, either the document is updated as part of the same change, or the change is captured against a planned roadmap milestone in [`Roadmap.md`](Roadmap.md). If a deployment practice contradicts this document, the document is wrong and is updated; the deployment is left alone.*

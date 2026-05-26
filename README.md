@@ -1,14 +1,14 @@
 # entra-shared-mailbox-manager
 
-> A least-privilege delegation toolkit for Microsoft 365 shared mailboxes. Replaces Admin Center workflows with role-mapped self-service: team managers get scoped Exchange RBAC over their team's mailboxes via Entra group membership, with bulk operations, delegate audits, and SharePoint-hosted config. WPF / .NET 8, Intune-deployable.
+> A least-privilege delegation toolkit for Microsoft 365 shared mailboxes. Replaces Admin Center workflows with role-mapped self-service: team managers get scoped Exchange RBAC over their team's mailboxes via Entra group membership, with bulk operations, delegate audits, and role-to-scope filtering. WPF / .NET 8, Intune-deployable.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-8.0-512BD4.svg)](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-0078D6.svg)]()
-[![Status: design phase](https://img.shields.io/badge/Status-design%20phase-orange.svg)]()
+[![Status: v1.0 pre-release](https://img.shields.io/badge/Status-v1.0%20pre--release-orange.svg)]()
 
 > [!IMPORTANT]
-> **This repository is in the design phase.** The architecture and security model are documented and stable (see [`docs/Architecture.md`](docs/Architecture.md)). The v1 PowerShell script that this tool is replacing is functional and lives in [`legacy/`](legacy/). The v2 WPF application is under active development — no compiled binaries are available yet. If you are evaluating this for production use, watch the repo and check back when a release is published.
+> **The v1.0 codebase is in place; the first release artifact is in preparation.** Source code, tests, configuration loader, MSAL authentication, the three core flows (audit / cleanup / bulk grant), and role-to-scope filtering are all implemented. MSIX packaging and the first GitHub Release are the remaining work between here and a publish-able v1.0. See [`docs/Roadmap.md`](docs/Roadmap.md) for the version-by-version delivery plan and [`docs/Setup.md`](docs/Setup.md) for the v1.0 deployment runbook. The v1 PowerShell script that this tool replaces is functional and lives in [`legacy/`](legacy/).
 
 ---
 
@@ -22,14 +22,13 @@ The tool is **org-agnostic**. The same compiled MSIX works in any Microsoft 365 
 
 ## Key features
 
-- **Bulk grant and bulk revoke** of `FullAccess`, `SendAs`, and `SendOnBehalf` across all shared mailboxes in a target Entra security group, with a mandatory preview pane before any mutation.
+- **Bulk grant** of `FullAccess` and `SendAs` to one or more users across one, several, or all shared mailboxes in a target Entra security group, with a mandatory confirmation modal listing every (user × mailbox) operation before any cmdlet fires.
 - **Delegate auditing** that resolves every trustee against Microsoft Graph and flags accounts whose Entra sign-in is blocked — the most common source of orphaned mailbox permissions.
-- **Interactive cleanup** of blocked delegates with `Y` / `N` / `Approve-all` / `Quit` semantics per trustee, structured per-action logging, and dry-run support.
-- **Delegated administration** for non-admin team leads, enforced by Exchange Online RBAC management scopes. A Project Manager can administer PM mailboxes; an Operations lead can administer Ops mailboxes; neither can touch the other's, and neither holds a tenant-wide admin role.
-- **Centrally-managed configuration** via a JSON file hosted in SharePoint Online. Admins edit role mappings in one place; every running instance picks up changes on next launch — no Intune redeployment for config changes.
-- **Three deployment patterns from one binary.** Intune-managed with central config, Intune-managed with static config, or solo install with a first-run wizard. Same MSIX. Same code path.
-- **No service principal with standing privileges.** Every operation runs in the operator's own delegated context. A bug in the tool cannot give a user more access than they would have manually.
-- **Local audit trail.** CSV exports for human inspection, structured Serilog output for SIEM ingestion, and per-action JSON receipts retained for 90 days. The tool emits no telemetry.
+- **Cleanup of blocked delegates** through a DataGrid with row-level checkboxes, a "Select all blocked" shortcut, and a confirmation modal listing the exact permissions about to be revoked. Cancelling at the modal performs no writes.
+- **Role-to-scope filtering.** Each operator's sidebar shows only the SharedMail- groups their roles permit. A Project Manager sees their team's mailboxes, an Ops lead sees theirs, neither sees the other's. Mappings live in `appsettings.json` and follow the dual-layer security model described in [`docs/Architecture.md`](docs/Architecture.md).
+- **No service principal with standing privileges.** Every operation runs in the operator's own delegated context via MSAL. A bug in the tool cannot give a user more access than they would have manually.
+- **CSV audit trail** matching the legacy script byte-for-byte — `mailbox-audit-{ts}.csv`, `mailbox-cleanup-{ts}.csv`, and `SharedMail-BulkAction-{ts}.csv` — plus a daily-rolling Serilog text file. The tool emits no telemetry.
+- **Centrally-managed configuration** and **structured per-action JSON receipts** are roadmapped enhancements (v2.0 and v1.1 respectively); see [`docs/Roadmap.md`](docs/Roadmap.md).
 
 ## Screenshots
 
@@ -49,76 +48,88 @@ The complete reasoning, the Exchange RBAC setup, the authentication flow, and th
 
 ## Deployment patterns
 
-| Pattern | Who it's for | Setup time | Config updates |
-|---|---|---|---|
-| **A — Intune + Central SharePoint** | Enterprise, hundreds–thousands of users | ~30 min, one-time | Edit JSON in SharePoint, no redeployment |
-| **B — Intune, static config** | Enterprise without SharePoint hosting | ~20 min, one-time | Redeploy via Intune |
-| **C — Solo / manual install** | Individual admins, evaluation, contributors | ~5 min | First-run wizard or local JSON edit |
+| Pattern | Who it's for | Setup time | Config updates | v1.0 status |
+|---|---|---|---|---|
+| **C — Solo / manual install** | Individual admins, evaluation, contributors | ~10 min | Local JSON edit | **Supported** |
+| **B — Intune, static config** | Enterprise, fleet rollout | ~30 min, one-time | Redeploy via Intune | **Supported** |
+| **A — Intune + Central SharePoint** | Enterprise with live-edit role mapping | ~30 min, one-time | Edit JSON in SharePoint, no redeployment | v2.0 (planned) |
 
-All three patterns are produced from the same artifacts. The deploying administrator runs the **Config Builder** companion app once per tenant, picks a pattern, and receives a tenant-specific deployment kit (PowerShell scripts, JSON configs, and a Markdown walkthrough). Full step-by-step instructions are in [`docs/Setup.md`](docs/Setup.md).
+v1.0 supports Patterns B and C. Pattern A — and the **Config Builder** companion app that automates the tenant-side setup for all three patterns — is planned for v2.0. Full step-by-step instructions for v1.0 are in [`docs/Setup.md`](docs/Setup.md).
 
 ## Quickstart for evaluators
 
-> *(Available once the first MSIX is published to GitHub Releases. Until then, the [`legacy/`](legacy/) folder contains the v1 PowerShell script, which is functional in any M365 tenant after replacing the placeholder group IDs with real ones.)*
+> *(MSIX artifact will be attached to the first GitHub Release once packaging is finalized — see [`docs/Roadmap.md`](docs/Roadmap.md). Until then, build from source per [`docs/Setup.md`](docs/Setup.md) §9. The [`legacy/`](legacy/) folder contains the v1 PowerShell script for comparison.)*
 
-The intended flow once releases are available:
+The flow:
 
 ```text
-1. Download the latest SharedMailboxTool.msix and SharedMailboxTool.ConfigBuilder.exe
-   from the GitHub Releases page.
-2. Run ConfigBuilder.exe. The wizard walks you through Entra app registration,
-   role-to-scope mapping, and emits a deployment kit.
-3. Install the MSIX (Add-AppxPackage on Windows 10/11) and run the deployment
-   kit's Deploy-AppConfig.ps1 to drop the bootstrap config.
-4. Launch the app. Sign in with your Entra account. The mailbox picker will
-   be scoped to the roles you hold.
+1. Download the latest SharedMailboxTool.msix from the GitHub Releases page,
+   or build from source.
+2. Install the MSIX (double-click, or Add-AppxPackage on Windows 10/11).
+3. Drop a tenant-specific appsettings.json into
+   %LOCALAPPDATA%\entra-shared-mailbox-manager\ — minimum required values
+   are TenantId, ClientId, and at least one entry in KnownGroups.
+4. Run scripts/Install-Prerequisites.ps1 to install the ExchangeOnlineManagement
+   and Microsoft.Graph PowerShell modules.
+5. Launch the app. Sign in with your Entra account.
 ```
 
 ## Quickstart for administrators (deploy to a team)
 
-> *(Available once the first release is published. The full step-by-step procedure is in [`docs/Setup.md`](docs/Setup.md).)*
+> *(Full procedure in [`docs/Setup.md`](docs/Setup.md).)*
 
-Anticipated high-level steps for Pattern A:
+Pattern B high-level steps:
 
 ```text
-1. Create an Entra app registration (the Config Builder generates a helper script).
-2. Create an Entra security group per delegated role (e.g., ROLE-ProjectManager).
-3. Create Exchange RBAC management scopes and role groups per delegated role
-   (the Config Builder generates Setup-ExchangeRBAC.ps1 from a JSON definition).
-4. Tag shared mailboxes with CustomAttribute1 to match their scope.
-5. Upload the central config JSON to a SharePoint document library.
-6. Deploy the MSIX to target devices via Intune.
-7. Deploy the bootstrap Deploy-AppConfig.ps1 via Intune device scripts.
+1. Create an Entra app registration (Setup.md §3) and grant admin consent for
+   Group.Read.All, User.Read.All, and Exchange.Manage delegated scopes.
+2. Assign Exchange Recipient Administrator to your operators (Setup.md §4).
+3. (Optional but recommended) Configure Exchange RBAC management scopes for
+   Layer 1 platform-enforced security (Setup.md §5).
+4. Define role-to-scope mapping in appsettings.json for Layer 2 UX-side
+   filtering (Setup.md §7.2).
+5. Deploy the MSIX as a line-of-business app via Intune.
+6. Deploy a small PowerShell script via Intune that drops the tenant
+   appsettings.json onto each device.
+7. Deploy scripts/Install-Prerequisites.ps1 via Intune to install the
+   required PowerShell modules.
 ```
 
-After step 7, ongoing role-mapping changes are made by editing the SharePoint JSON. Every installed instance picks up the changes on next launch.
+After step 7, ongoing role-mapping changes in v1.0 require updating the deployment script and reassigning in Intune. The live-edit-in-SharePoint workflow is a v2.0 enhancement.
 
 ## Repository structure
 
 ```text
 entra-shared-mailbox-manager/
 ├── docs/
+│   ├── Roadmap.md            Version-by-version delivery plan. The
+│   │                         canonical reference for "what's in v1.0"
+│   │                         versus "what's deferred."
 │   ├── Architecture.md       Design source-of-truth: security model,
 │   │                         config architecture, deployment patterns,
 │   │                         component layout, references.
-│   └── Setup.md              Admin deployment runbook (Patterns A/B/C,
-│                             RBAC setup, troubleshooting, uninstall).
+│   └── Setup.md              v1.0 admin deployment runbook (Patterns B
+│                             and C, RBAC setup, troubleshooting, uninstall).
 ├── legacy/
 │   ├── shared-mailbox-manager.ps1   The v1 PowerShell script this product
 │   │                                replaces (preserved for historical
 │   │                                reference; tenant data redacted).
 │   ├── UserUPN.csv                  CSV template for the v1 bulk-grant flow.
 │   └── README.md                    Origin story and v1 capability summary.
-├── src/                      (Forthcoming) Visual Studio solution:
-│   ├── SharedMailbox.Core           Domain types and service interfaces.
-│   ├── SharedMailbox.PowerShell     EXO + Graph adapter (hosted PS).
-│   ├── SharedMailbox.App            WPF main application.
-│   ├── SharedMailbox.ConfigBuilder  WPF companion for deployment kits.
-│   └── SharedMailbox.Tests          xUnit test project.
-├── scripts/                  (Forthcoming)
-│   ├── Setup-EntraApp.ps1           App registration helper.
-│   └── Setup-ExchangeRBAC.ps1       Role group + management scope helper.
-├── deployment/               (Forthcoming) Packaging and Intune assets.
+├── src/SharedMailboxTool/    Visual Studio solution:
+│   ├── SharedMailbox.Core           Domain types, service interfaces, CSV
+│   │                                writer, UPN reader. No external deps.
+│   ├── SharedMailbox.PowerShell     EXO + Graph adapter (hosted PS runspace).
+│   ├── SharedMailbox.App            WPF main application (MSAL + WPF-UI +
+│   │                                CommunityToolkit.Mvvm).
+│   ├── SharedMailbox.Tests          xUnit test suite (~75 tests).
+│   └── SharedMailbox.ConfigBuilder  (v2.0) WPF companion app for tenant
+│                                    setup automation.
+├── scripts/
+│   └── Install-Prerequisites.ps1    PowerShell module installer. Idempotent.
+│                                    Intune-deployable.
+├── deployment/               (v1.0 in progress) MSIX packaging and Intune
+│                             assets — added in the MSIX packaging batch.
 ├── .gitignore
 ├── LICENSE
 └── README.md                 (this file)
@@ -132,23 +143,25 @@ The two structural v1 bugs (CSV log misreporting and lack of pre-flight bulk val
 
 ## Roadmap
 
-**v1.0 (target):** the three legacy operations (bulk grant, audit, blocked-delegate cleanup) under the dual-layer security model, with Patterns A / B / C all supported, MSIX packaging, and a complete admin deployment runbook.
+See [`docs/Roadmap.md`](docs/Roadmap.md) for the canonical version-by-version delivery plan. At a glance:
 
-**v1.x:** Outlook calendar permission management on shared mailboxes; mailbox `CustomAttribute` tagging UI for admins; scheduled audits with optional email delivery.
+- **v1.0** — legacy parity (audit / cleanup / bulk grant), MSAL authentication, role-to-scope filtering (Layer 2 of the security model), MSIX packaging, Patterns B and C. *In progress; this is the next release.*
+- **v1.1** — first-run wizard, operation receipts directory, GitHub Actions CI, system-theme detection, app-layer tests.
+- **v1.2** — tenant setup automation (`Setup-EntraApp.ps1`, `Setup-ExchangeRBAC.ps1`), in-app logs viewer, CustomAttribute1 tag-editing UI.
+- **v2.0** — the full Architecture.md design: SharePoint central configuration, Config Builder companion app, live config reload (Pattern A becomes available).
+- **v2.x** — calendar permissions, distribution / M365 group permissions, scheduled audits, additional config backends, signed-by-default MSIX.
 
-**v2:** Distribution group and Microsoft 365 group permission management; additional central-config backends (Azure Blob with SAS, tenant-internal HTTPS); signed-by-default MSIX for verified-publisher status.
-
-Items deliberately out of scope are listed in [`docs/Architecture.md`](docs/Architecture.md#13-out-of-scope-and-future-work).
+Items deliberately out of scope are listed in [`docs/Architecture.md`](docs/Architecture.md#13-out-of-scope-and-future-work) and [`docs/Roadmap.md`](docs/Roadmap.md).
 
 ## Contributing
 
-Contributions are welcome once the v1 codebase is in place. Until then, useful contributions include:
+The v1.0 codebase is in place and the test suite passes. Useful contributions:
 
-- Reviewing [`docs/Architecture.md`](docs/Architecture.md) and opening issues for design questions, gaps, or alternative approaches.
-- Testing the [legacy script](legacy/shared-mailbox-manager.ps1) in your own tenant (with placeholder group IDs replaced) and reporting behaviour that the v2 design should preserve.
-- Proposing concrete improvements to the security model, configuration model, or deployment patterns.
+- Reviewing [`docs/Architecture.md`](docs/Architecture.md), [`docs/Setup.md`](docs/Setup.md), or [`docs/Roadmap.md`](docs/Roadmap.md) and opening issues for design questions, gaps, alternative approaches, or doc bugs.
+- Building from source per [`docs/Setup.md`](docs/Setup.md) §9, testing in your own tenant, and reporting issues against the v1.0 implementation.
+- Proposing concrete improvements to the security model, configuration model, deployment patterns, or per-version scope in the Roadmap.
 
-A `CONTRIBUTING.md` with full developer setup instructions will land alongside the first code commits.
+A `CONTRIBUTING.md` with developer-setup specifics is on the v1.0 hygiene-pass list.
 
 ## License
 

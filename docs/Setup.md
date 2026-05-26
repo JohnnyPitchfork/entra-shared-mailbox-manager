@@ -1,480 +1,385 @@
-# Setup — `entra-shared-mailbox-manager`
+# Setup guide — v1.0
 
-> This is the deployment runbook for an IT administrator standing the tool up in their own Microsoft 365 tenant. It assumes you have read the top-level [`README.md`](../README.md) and at least skimmed [`Architecture.md`](Architecture.md) — particularly section 4 (security model) and section 8 (deployment patterns), because the choices below make more sense in that context.
-
-> [!IMPORTANT]
-> **Status: draft / forward-looking.** Several steps in this runbook refer to artifacts that ship with the v1 release (`SharedMailboxTool.msix`, `SharedMailboxTool.ConfigBuilder.exe`, the `scripts/Setup-EntraApp.ps1` helper, the `scripts/Setup-ExchangeRBAC.ps1` helper). Those artifacts do not exist yet — the v1 codebase is under active development. Sections that depend on a v1 artifact are marked with a `⏳ Pending v1 release` callout, and the manual procedure is documented alongside so you can still complete the deployment by hand if you want to evaluate the architecture today. When the v1 release is published, the manual procedures remain valid; the helpers just automate the click-heavy bits.
-
----
-
-## 1. Audience and prerequisites
-
-### 1.1 Who this runbook is for
-
-A Microsoft 365 administrator with the following roles, at minimum, in the target tenant:
-
-- **Global Administrator** *or* **Cloud Application Administrator** — to create the Entra app registration and grant admin consent.
-- **Exchange Administrator** — to create Exchange RBAC role groups and management scopes (only required if you plan to use the delegated-administration model in Pattern A, which is the entire point of the tool; see section 3.4).
-- **SharePoint Administrator** *or* site owner of the target SharePoint site — to host the central configuration file (Pattern A only).
-- **Intune Administrator** — to assign the MSIX and the bootstrap PowerShell script to user/device groups (Patterns A and B).
-
-If you do not personally hold all of the above, the runbook can be split across operators. The Entra and Exchange steps must happen first; SharePoint and Intune can happen in either order after that.
-
-### 1.2 Tooling you'll need on your admin workstation
-
-- **PowerShell 7.x** — for `Connect-ExchangeOnline`, `Connect-MgGraph`, and the helper scripts.
-- **Microsoft.Graph PowerShell module** — `Install-Module Microsoft.Graph -Scope CurrentUser`
-- **ExchangeOnlineManagement PowerShell module** — `Install-Module ExchangeOnlineManagement -Scope CurrentUser`
-- **Microsoft Intune admin center access** — https://intune.microsoft.com
-- **Microsoft Entra admin center access** — https://entra.microsoft.com
-- **A text editor** for hand-editing JSON config files. VS Code is fine.
-
-### 1.3 Information you'll need to gather before starting
-
-- **Tenant ID** — find at https://entra.microsoft.com → Overview. Looks like a GUID.
-- **The Entra security groups that represent your delegated roles** — e.g., one group per team (`ROLE-ProjectManagers`, `ROLE-OpsLeads`). If these don't exist yet, create them in Entra → Groups → New group → Security group, and populate with the users who should hold each role.
-- **The Entra security groups that list each team's shared mailboxes** — these are your `SharedMail-` groups in the convention the v1 script used (e.g., `SharedMail-PM-Mailboxes`). If you don't already organize shared mailboxes this way, see section 3.3 for the structuring recommendation.
-- **A SharePoint site you control** — Pattern A only. A new site dedicated to IT operations works well; the central config will live in a document library on this site.
+> Admin deployment runbook for `entra-shared-mailbox-manager`. Walks an IT or Exchange administrator through registering the application in Entra, configuring it for a single tenant, and rolling it out either manually on one machine or to a fleet via Intune.
+>
+> **This guide is scoped to the v1.0 release.** Features that are deferred to later versions (SharePoint-hosted central configuration, the Config Builder companion app, first-run wizard, fully-automated RBAC setup) are not described here — see [`Roadmap.md`](Roadmap.md) for what lands when. The v1.0-supported deployment patterns are **Pattern B** (Intune + scripted config drop) and **Pattern C** (solo manual install). Pattern A (SharePoint central config) is a v2.0 feature.
 
 ---
 
-## 2. Choose your deployment pattern
+## 1. At a glance
 
-```mermaid
-flowchart TD
-    Start([Choosing a pattern]) --> Q1{Will you deploy to<br/>more than a few users?}
-    Q1 -- No --> C[Pattern C<br/>Solo / manual install]
-    Q1 -- Yes --> Q2{Will you use<br/>Microsoft Intune?}
-    Q2 -- No --> C
-    Q2 -- Yes --> Q3{Do you want to update<br/>role mappings without<br/>redeploying the app?}
-    Q3 -- Yes --> A[Pattern A<br/>Intune + Central SharePoint]
-    Q3 -- No --> B[Pattern B<br/>Intune-only, static config]
-```
+The end-to-end path is six steps. Steps 1, 2, and 3 are one-time tenant work the administrator does once. Steps 4, 5, and 6 are per-machine and can be automated via Intune.
 
-Most enterprises should choose **Pattern A**. The SharePoint hosting requirement is a one-time, ~5-minute setup task that pays for itself the first time you need to add a new team to the role mapping without redeploying through Intune. Pattern B is for environments with a policy against application configuration hosted outside Intune. Pattern C is for evaluating the tool, contributing to the project, or one-off installs.
+| # | What | Where it runs | Repeat per |
+|---|------|---------------|------------|
+| 1 | Create an Entra app registration and grant admin consent | Entra admin center | Tenant (once) |
+| 2 | Assign Exchange admin roles to your operators | Entra / Exchange admin center | Operator |
+| 3 | (Optional) Configure Exchange RBAC management scopes for Layer 1 security | Exchange Online PowerShell | Role |
+| 4 | Install the prerequisite PowerShell modules | `Install-Prerequisites.ps1` | Machine |
+| 5 | Drop the tenant `appsettings.json` onto each machine | Manual or Intune device script | Machine |
+| 6 | Install the application | Manual or Intune MSIX assignment | Machine |
+
+Steps 4, 5, and 6 are independent and can be done in any order; the app refuses to start cleanly if any are missing, with an actionable error in each case.
 
 ---
 
-## 3. Common one-time tenant setup
+## 2. Prerequisites
 
-Sections 3.1 through 3.4 apply to **all three deployment patterns**. Patterns diverge starting at section 4.
+### 2.1 Tenant
 
-### 3.1 Create the Entra app registration
+- A Microsoft 365 / Entra tenant where the operator accounts live.
+- Permission to create an Entra app registration and grant admin consent (**Global Administrator** or **Privileged Role Administrator**).
+- Existing `SharedMail-` prefixed Entra security groups whose members are the shared mailboxes the tool will operate on, **or** willingness to use the manual group-ID entry fallback in the sidebar.
 
-The tool authenticates each user interactively against this app registration. It is single-tenant by default (only your users can sign in) and requests **delegated permissions only** — no application permissions, no client secret, no certificate.
+### 2.2 Operator (end user)
 
-> ⏳ **Pending v1 release:** `scripts/Setup-EntraApp.ps1` will automate this section idempotently. The manual procedure below remains valid.
+The user who runs the tool needs an Exchange admin role at the tenant level. Minimum is **Exchange Recipient Administrator**, which is sufficient for every cmdlet the tool calls (`Add-MailboxPermission`, `Remove-MailboxPermission`, `Add-RecipientPermission`, `Remove-RecipientPermission`, `Set-Mailbox -GrantSendOnBehalfTo`). For a less-scoped role, **Exchange Administrator** also works.
 
-**Manual procedure:**
+### 2.3 Machine
 
-1. Go to https://entra.microsoft.com → **Applications** → **App registrations** → **+ New registration**.
-2. **Name:** `Shared Mailbox Manager` (or any name that helps your users recognize the consent prompt).
-3. **Supported account types:** *Accounts in this organizational directory only (Single tenant)*.
-4. **Redirect URI:** select **Public client/native (mobile & desktop)** and enter `http://localhost`. This is the standard MSAL desktop redirect.
-5. Click **Register**.
-6. On the resulting **Overview** page, record the **Application (client) ID** and **Directory (tenant) ID** — you'll need both for the bootstrap config later.
-7. Go to **API permissions** → **+ Add a permission** → **Microsoft Graph** → **Delegated permissions**. Add the following:
-    - `Group.Read.All`
-    - `User.Read.All`
-    - `Files.Read.All`
-8. Click **Grant admin consent for [your tenant]** and confirm. The three permissions should show "Granted for [tenant]" in green.
-9. Go to **Authentication** → **Advanced settings** → set **Allow public client flows** to **Yes**. (Required for the MSAL interactive desktop flow.)
+- Windows 10 (build 1809 or later) or Windows 11.
+- .NET 8 Desktop Runtime (bundled by the MSIX deployment; downloadable from `https://dotnet.microsoft.com/download/dotnet/8.0` for manual installs).
+- PowerShell 7.x recommended for running `Install-Prerequisites.ps1`. The app bundles `Microsoft.PowerShell.SDK` for its in-process runspace, so PS 7 is not strictly required at runtime.
+- Internet access to `login.microsoftonline.com`, `graph.microsoft.com`, and `outlook.office365.com`.
 
-**No client secret, no certificate, no application permissions.** If you find yourself adding any of these, stop — you are configuring the wrong shape of app. The tool's security model depends on the app having no standing privileges (see [Architecture.md §5.3](Architecture.md#53-the-no-service-principal-with-standing-privileges-stance)).
+---
 
-### 3.2 Verify the consent surface
+## 3. Step 1 — Create the Entra app registration
 
-Sign in to https://myapps.microsoft.com and confirm the new app registration appears under "My apps" for your test user (it should, immediately after admin consent). If it does not, the consent did not go through; revisit section 3.1 step 8.
+The app is a **public-client (mobile and desktop) registration**. It does not need a client secret or certificate because every operation runs in the operator's own delegated context via MSAL.
 
-### 3.3 Define your role-to-scope mapping
+1. In the Entra admin center, navigate to **Identity → Applications → App registrations → New registration**.
+2. **Name:** `SharedMail Tool` (or any name your operators will recognize on the consent prompt).
+3. **Supported account types:** *Accounts in this organizational directory only* (single-tenant). The tool is single-tenant by design in v1.0.
+4. Leave **Redirect URI** blank on the create page. Click **Register**.
+5. On the Overview page, record the **Application (client) ID** and the **Directory (tenant) ID** — both go into `appsettings.json` later.
 
-Before you can configure the tool, decide *who can manage what*. The model the tool expects:
+### 3.1 Configure the platform
 
-- **Roles** are Entra security groups whose members are the people authorized to administer some subset of shared mailboxes. Convention: `ROLE-<TeamName>` (e.g., `ROLE-ProjectManagers`).
-- **Scopes** are subsets of shared mailboxes, identified by Exchange `CustomAttribute1` value. Convention: a short uppercase tag per team (`PM`, `OPS`, `HR`, etc.).
-- **Mapping**: each role maps to one or more scopes.
+1. **Authentication → Add a platform → Mobile and desktop applications**.
+2. Tick `http://localhost` from the suggested redirect URIs (or add it manually). This matches the `RedirectUri` default in `appsettings.json` and the MSAL system-browser flow the app uses.
+3. Scroll to **Advanced settings → Allow public client flows** and set it to **Yes**. Without this, MSAL public-client flows fail with an obscure AADSTS error.
+4. Save.
 
-A worked example, for a fictional `ROLE-ProjectManagers` who can administer the team's project mailboxes:
+### 3.2 Add and grant API permissions
 
-| Entra security group | CustomAttribute1 values | Mailboxes covered |
-|---|---|---|
-| `ROLE-ProjectManagers` | `PM` | Every shared mailbox tagged `CustomAttribute1 = PM` |
-| `ROLE-OpsLeads` | `OPS` | Every shared mailbox tagged `CustomAttribute1 = OPS` |
-| `ROLE-Helpdesk` | `PM`, `OPS`, `HR` | Every shared mailbox tagged with any of those three values |
+Add each from **API permissions → Add a permission**:
 
-If you have not previously used `CustomAttribute1` on your shared mailboxes, you'll need to tag them once. For a single mailbox:
+| API | Permission | Purpose |
+|-----|------------|---------|
+| Microsoft Graph | `Group.Read.All` (delegated) | `Get-MgGroupMember` for SharedMail- groups; `Get-MgUserMemberOf` for the role filter |
+| Microsoft Graph | `User.Read.All` (delegated) | `Get-MgUser` for the audit's sign-in-status lookup |
+| Office 365 Exchange Online | `Exchange.Manage` (delegated) | All EXO cmdlets the tool runs |
+
+After adding all three, click **Grant admin consent for {tenant}**. This requires Global Administrator or Privileged Role Administrator. Without admin consent, end users would see a consent prompt on every sign-in for the `.All`-scope Graph permissions, which the user-consent flow does not support.
+
+The API-permissions blade should show all three permissions with a **Granted for {tenant}** badge after consent.
+
+> **Do not** add a client secret, a certificate, or any application-permission scopes. v1.0 is delegated-only by design — the security model depends on the app having no standing privileges.
+
+---
+
+## 4. Step 2 — Assign operator roles
+
+Each user who runs the tool needs an Exchange admin role at the tenant level. Two practical approaches:
+
+- **Direct assignment.** In the Entra admin center: **Identity → Roles & admins → Roles → Exchange Recipient Administrator → Add assignments**. Fast for a handful of operators.
+- **Group-based assignment.** Create an Entra security group named e.g. `ROLE-MailboxAdmins`, mark it **role-assignable**, and assign Exchange Recipient Administrator to the group. Then add operators to the group. Scales better and pairs naturally with the role-to-scope mapping in Step 5.
+
+Role changes in Entra propagate within minutes but can take up to an hour. If sign-in works but operations fail with "Access is denied" or AADSTS errors, the role isn't applied yet.
+
+---
+
+## 5. Step 3 (optional) — Configure Exchange RBAC for Layer 1 security
+
+This step is **optional for v1.0 but recommended for production**. Skip if you're doing a quick first-time evaluation.
+
+The v1.0 tool implements Layer 2 of the dual-layer security model from [`Architecture.md`](Architecture.md) §4.2 — the sidebar filters to show each operator only the SharedMail- groups their roles permit. Layer 1 — the platform-enforced Exchange RBAC management scope — has to be configured manually until the v1.2 release adds an automation helper (see [`Roadmap.md`](Roadmap.md)).
+
+Without Layer 1, the v1.0 tool's filtering is a **UX layer, not a security boundary** — a sufficiently determined operator could bypass it by running PowerShell directly against their tenant. For a small internal evaluation that's fine; for production, you'll want both layers.
+
+### 5.1 What Layer 1 actually enforces
+
+Exchange Online's RBAC system can scope a role group to a subset of recipients (e.g., "Project Managers can administer only mailboxes tagged `CustomAttribute1 = PM`"). When configured, Exchange Online itself refuses any operation outside that scope — regardless of whether it came from the tool, from PowerShell, or from the Exchange admin center.
+
+### 5.2 Recipe (one role)
+
+For each role you want to delegate, run the following from an elevated Exchange Online PowerShell session. Substitute names and CustomAttribute1 values as appropriate.
 
 ```powershell
 Connect-ExchangeOnline
-Set-Mailbox -Identity "pm-team@contoso.com" -CustomAttribute1 "PM"
-```
 
-For bulk tagging by some other property (display name pattern, distribution group membership, etc.) the v1 product will surface a tagging UI for administrators. For now, a quick loop works:
-
-```powershell
-$pmMailboxes = @(
-    "pm-team@contoso.com",
-    "project-alpha@contoso.com",
-    "project-beta@contoso.com"
-)
-foreach ($mbx in $pmMailboxes) {
+# 1. Tag the shared mailboxes that this role can administer.
+$mailboxes = @("pm-team@contoso.com", "project-alpha@contoso.com", "project-beta@contoso.com")
+foreach ($mbx in $mailboxes) {
     Set-Mailbox -Identity $mbx -CustomAttribute1 "PM"
 }
-```
 
-Record your role-to-scope mapping; you'll plug it into the configuration file later.
-
-### 3.4 (Optional but strongly recommended) Configure Exchange RBAC
-
-This section sets up the **platform-enforced** half of the dual-layer security model. Without it, the tool's UI filtering still works — but a user with elevated Exchange admin rights could bypass it by going to Admin Center directly. With it, the platform itself refuses unauthorized operations regardless of how they are issued. See [Architecture.md §6.1](Architecture.md#61-layer-1--platform-enforced-exchange-online-rbac) for why this matters.
-
-> ⏳ **Pending v1 release:** `scripts/Setup-ExchangeRBAC.ps1` will take a JSON definition of your roles and create everything below in one pass. The manual procedure remains the canonical reference.
-
-**Manual procedure** — repeat for each role you defined in section 3.3.
-
-For each role, you create three things: a custom management scope, a custom role group bound to that scope, and a membership link from the Entra security group to the role group.
-
-```powershell
-Connect-ExchangeOnline
-
-# Example: configure the ROLE-ProjectManagers role with CustomAttribute1='PM'
-
-# 1. Create the management scope (filters to shared mailboxes tagged PM).
+# 2. Create a management scope that filters to those mailboxes.
 New-ManagementScope `
     -Name "Scope-SharedMail-PM" `
     -RecipientRestrictionFilter "RecipientTypeDetails -eq 'SharedMailbox' -and CustomAttribute1 -eq 'PM'"
 
-# 2. Create the role group, bound to that scope, with the minimum
-#    recipient-management role.
+# 3. Create a role group bound to that scope, holding the minimum permission-management role.
 New-RoleGroup `
     -Name "RoleGroup-SharedMail-PM-Managers" `
     -Roles "Mail Recipients" `
     -CustomRecipientWriteScope "Scope-SharedMail-PM"
 
-# 3. Add the Entra security group as a member of the role group.
+# 4. Add the Entra security group of users as a member of the role group.
 Add-RoleGroupMember `
     -Identity "RoleGroup-SharedMail-PM-Managers" `
     -Member "ROLE-ProjectManagers"
 ```
 
-After running the above for every role, validate by signing in as a member of one of the Entra groups and trying to run `Get-Mailbox` against a mailbox *outside* your scope. Exchange should refuse the operation.
+Repeat per role. After running for every role, validate by signing in as a member of one of the Entra groups and trying to run `Get-Mailbox` against a mailbox outside the scope — Exchange should refuse.
+
+The CustomAttribute1 tag (`PM` in the example above) is the link between the Exchange-side scope and the role mapping you'll define in Step 6.2. Use a short uppercase tag per role.
 
 ---
 
-## 4. Pattern A — Intune + Central SharePoint (recommended)
+## 6. Step 4 — Install PowerShell modules
 
-You have completed sections 3.1–3.4. Now you configure the central SharePoint config, build the bootstrap config, and deploy via Intune.
+The tool hosts a PowerShell runspace internally and imports two module families on first sign-in: `ExchangeOnlineManagement` and `Microsoft.Graph`. Combined install footprint: ~250 MB. Install time: 2–5 minutes on a typical connection.
 
-### 4.1 Host the central configuration file in SharePoint
+### 6.1 Manual install
 
-1. Open or create a SharePoint Online site dedicated to IT operations. A communications site works well. Limit edit permissions to your IT admin group.
-2. In that site, create a document library named `App Configuration` (or any name you prefer).
-3. Restrict edit permissions on the library: **Library settings** → **Permissions for this document library** → **Stop inheriting permissions** → grant **Edit** only to your IT admin group, **Read** to everyone who will run the tool.
-4. Upload a file named `central-config.json` with the following template, edited for your tenant:
+For evaluation or single-machine setups, run `scripts/Install-Prerequisites.ps1` from a PowerShell prompt:
 
-    ```jsonc
-    {
-      "schemaVersion": 1,
-      "sharedMailGroups": [
-        {
-          "entraGroupId": "<group-id-from-Entra>",
-          "displayName": "SharedMail-PM-Mailboxes"
-        }
-      ],
-      "roles": [
-        {
-          "entraGroupId": "<ROLE-ProjectManagers-group-id>",
-          "displayName": "Project Managers",
-          "mailboxScope": {
-            "matchType": "CustomAttribute1",
-            "values": ["PM"]
-          }
-        },
-        {
-          "entraGroupId": "<ROLE-OpsLeads-group-id>",
-          "displayName": "Ops Leads",
-          "mailboxScope": {
-            "matchType": "CustomAttribute1",
-            "values": ["OPS"]
-          }
-        }
-      ],
-      "auditPolicy": {
-        "defaultIncludeSendAs": true,
-        "blockedDelegateCleanupRequiresConfirmation": true
-      },
-      "configCacheTtlHours": 24
-    }
-    ```
+```powershell
+.\Install-Prerequisites.ps1                  # installs for the current user
+.\Install-Prerequisites.ps1 -Scope AllUsers  # all users (elevated)
+.\Install-Prerequisites.ps1 -Force           # reinstall at latest versions
+```
 
-5. Open the uploaded file and copy its **direct link**. In SharePoint, click the file → **...** menu → **Details** → **Path** (or right-click → **Copy link** → **Anyone with existing access**). The result will look like `https://contoso.sharepoint.com/sites/ITOps/App%20Configuration/central-config.json`. Record this URL — it becomes the `CentralConfigUrl` in the next section.
+The script is idempotent. Re-running when the modules are already present is a no-op unless `-Force` is supplied.
 
-### 4.2 Prepare the bootstrap configuration
+### 6.2 Intune deployment
 
-The bootstrap config is the small local JSON that tells each running instance of the app what tenant it lives in and where to fetch the central config. Save the following as `bootstrap-config.json`, edited for your tenant:
+For fleet rollouts, upload `Install-Prerequisites.ps1` as a Windows platform script under **Devices → Scripts and remediations → Add → Windows platform script**.
+
+Recommended settings:
+- **Run this script using the logged on credentials:** No (run as SYSTEM).
+- **Enforce script signature check:** No (script is unsigned by default; sign it with your own code-signing cert if your tenant requires signed scripts).
+- **Run script in 64 bit PowerShell:** Yes.
+
+Target the same device group that gets the application package. Intune retries failed runs on its own schedule, so transient install failures usually self-heal within a few hours.
+
+### 6.3 What happens if modules are missing
+
+If an operator launches the app on a machine where the modules aren't installed, the first sign-in attempt throws a `PowerShellInvocationException` whose message includes the install command verbatim. Surfaces in the in-app error pane at the bottom of the window — copy-paste-runnable.
+
+---
+
+## 7. Step 5 — Configure the application
+
+The application reads configuration from a JSON file with a three-layer override system. From lowest to highest priority:
+
+1. **`appsettings.json` next to the executable** — bundled default. Always ships with placeholder values; never has real tenant data.
+2. **`appsettings.local.json` next to the executable** — optional developer override. Git-ignored. Useful when running `dotnet run` from a clone.
+3. **`%LOCALAPPDATA%\entra-shared-mailbox-manager\appsettings.json`** — the per-user override. This is what Intune drops onto end-user machines, and where individual operators put real values for local evaluation.
+
+Values from higher layers replace values from lower layers key-by-key. Arrays (like `KnownGroups` and `Roles`) are replaced as a whole, not merged element-by-element.
+
+### 7.1 Minimum required content
+
+The smallest viable override file:
 
 ```json
 {
-  "tenantId": "<tenant-id>",
-  "clientId": "<client-id-from-section-3.1>",
-  "centralConfigUrl": "<URL-from-section-4.1-step-5>"
+  "AzureAd": {
+    "TenantId": "your-tenant-guid",
+    "ClientId": "your-app-reg-client-guid"
+  },
+  "KnownGroups": [
+    { "Name": "SharedMail-Permits",   "GroupId": "9aea063a-0af2-440b-9c60-65f4c6e9431d" },
+    { "Name": "SharedMail-Utilities", "GroupId": "01defb2f-bb5f-46b9-9a73-e6f6a7121f1c" }
+  ]
 }
 ```
 
-The deploying admin keeps this file under source control inside their IT admin SharePoint site or a private repo. It contains no secrets — but it is tenant-specific and should not be shared publicly.
+Replace the GUIDs with the **Application (client) ID** and **Directory (tenant) ID** from Step 1, and your tenant's SharedMail- groups. `Name` is the display label shown in the sidebar — make it whatever your operators will recognize.
 
-### 4.3 Deploy the MSIX via Intune
+### 7.2 Adding role-to-scope filtering (optional)
 
-> ⏳ **Pending v1 release:** the `SharedMailboxTool.msix` artifact will be published to the GitHub Releases page once the v1 codebase ships. Section 4.3 will then become applicable.
+If you want the sidebar to show each operator only the SharedMail- groups their roles permit (the v1.0 Layer 2 security feature), add a `Roles` section:
 
-When the MSIX is available:
-
-1. In the Intune admin center, go to **Apps** → **Windows** → **+ Add** → **Line-of-business app**.
-2. Upload `SharedMailboxTool.msix`. Fill in publisher (`Jon Campbell`), name, description, and optionally an icon.
-3. Assign to the user groups who will use the tool. **Assignment type: Required**.
-4. Save and wait for the assignment to propagate (typically minutes; up to several hours in larger tenants).
-
-### 4.4 Deploy the bootstrap script via Intune
-
-The bootstrap config is delivered to each device by a small PowerShell script run by Intune's "Scripts and remediations" feature.
-
-Save the following as `Deploy-AppConfig.ps1`, with the JSON inlined from section 4.2:
-
-```powershell
-# Deploys the bootstrap config to %ProgramData%\SharedMailboxTool\config.json
-# Run by Intune as SYSTEM. Idempotent — safe to re-run on every device check-in.
-
-$ErrorActionPreference = "Stop"
-
-$configDir  = Join-Path $env:ProgramData "SharedMailboxTool"
-$configPath = Join-Path $configDir "config.json"
-
-if (-not (Test-Path $configDir)) {
-    New-Item -ItemType Directory -Path $configDir -Force | Out-Null
-}
-
-$config = @{
-    tenantId         = "<tenant-id>"
-    clientId         = "<client-id>"
-    centralConfigUrl = "<central-config-url>"
-}
-
-$config | ConvertTo-Json -Depth 10 | Set-Content -Path $configPath -Encoding UTF8
-
-# Make the config readable to all local users (no ACL hardening — config is non-secret)
-$acl = Get-Acl $configPath
-$rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-    "Users", "Read", "Allow"
-)
-$acl.AddAccessRule($rule)
-Set-Acl -Path $configPath -AclObject $acl
-
-Write-Host "Bootstrap config written to $configPath"
-```
-
-In Intune:
-
-1. **Devices** → **Scripts and remediations** → **Platform: Windows** → **+ Add** → **Platform script**.
-2. Upload `Deploy-AppConfig.ps1`.
-3. **Run this script using the logged-on credentials:** No.
-4. **Enforce script signature check:** No (unless you sign your internal scripts).
-5. **Run script in 64-bit PowerShell:** Yes.
-6. Assign to the same user/device groups as the MSIX. Save.
-
-### 4.5 Verify on a target device
-
-After both assignments have propagated:
-
-1. Sign in to a target device as a user who is a member of one of the `ROLE-` groups.
-2. Confirm `%ProgramData%\SharedMailboxTool\config.json` exists and contains the expected `tenantId`, `clientId`, and `centralConfigUrl`.
-3. Launch the Shared Mailbox Tool from the Start menu.
-4. Complete the interactive sign-in. The app should request consent (already granted at the tenant level in section 3.1) and proceed.
-5. Confirm the mailbox picker lists only mailboxes the user's roles allow, per your section 3.3 mapping.
-
-If the mailbox picker is empty: check that the user is a member of at least one `ROLE-` group, that the role is present in `central-config.json`, that mailboxes are tagged with the expected `CustomAttribute1` value, and that the user can `Get-Mailbox` on at least one of those mailboxes from PowerShell (which validates the Exchange RBAC half).
-
----
-
-## 5. Pattern B — Intune, static config
-
-Identical to Pattern A except step 4.1 is skipped and step 4.4 deploys the operational data (role mappings, group lists) inline instead of as a `centralConfigUrl`.
-
-The `Deploy-AppConfig.ps1` script becomes:
-
-```powershell
-$config = @{
-    tenantId         = "<tenant-id>"
-    clientId         = "<client-id>"
-    centralConfigUrl = $null   # Pattern B: no central fetch
-    sharedMailGroups = @(
-        @{ entraGroupId = "<group-id>"; displayName = "SharedMail-PM-Mailboxes" }
-    )
-    roles = @(
-        @{
-            entraGroupId  = "<ROLE-ProjectManagers-group-id>"
-            displayName   = "Project Managers"
-            mailboxScope  = @{ matchType = "CustomAttribute1"; values = @("PM") }
-        }
-    )
-    auditPolicy = @{
-        defaultIncludeSendAs = $true
-        blockedDelegateCleanupRequiresConfirmation = $true
+```json
+{
+  "AzureAd":     { "TenantId": "...", "ClientId": "..." },
+  "KnownGroups": [ ... ],
+  "Roles": [
+    {
+      "Name": "Project Managers",
+      "EntraGroupId": "<ROLE-ProjectManagers-group-guid>",
+      "AllowedGroupIds": [
+        "9aea063a-0af2-440b-9c60-65f4c6e9431d",
+        "01defb2f-bb5f-46b9-9a73-e6f6a7121f1c"
+      ]
+    },
+    {
+      "Name": "Operations Leads",
+      "EntraGroupId": "<ROLE-OpsLeads-group-guid>",
+      "AllowedGroupIds": [
+        "01defb2f-bb5f-46b9-9a73-e6f6a7121f1c"
+      ]
     }
+  ]
 }
 ```
 
-Every role-mapping change is a script update + Intune reassignment. Tolerable for small, static deployments; tedious at scale.
+Each role's `EntraGroupId` is the object ID of the Entra security group whose members hold that role. `AllowedGroupIds` are the object IDs of the SharedMail- groups that role can administer. They must appear in `KnownGroups` above; entries that don't are silently invisible.
+
+If `Roles` is empty or missing, no filtering is applied — every operator sees every `KnownGroup`. This is the legacy v1.0-pre behavior and a sensible starting point for a small evaluation.
+
+### 7.3 Optional fields
+
+Everything not in the override inherits the bundled default:
+
+| Field | Bundled default | Override when |
+|-------|-----------------|---------------|
+| `AzureAd.GraphScopes` | `["Group.Read.All", "User.Read.All"]` | You need additional Graph scopes (rare) |
+| `AzureAd.ExchangeResource` | `"https://outlook.office365.com"` | Sovereign cloud (GCC High, DoD, China) |
+| `AzureAd.RedirectUri` | `"http://localhost"` | Must match what's configured in the app registration |
+| `Logging.LogDirectory` | `"Logs"` (resolved relative to `%LOCALAPPDATA%\entra-shared-mailbox-manager\`) | You want logs in a specific shared location |
+
+### 7.4 Validation
+
+If any required value is missing, the app refuses to start with a "Configuration validation failed" dialog listing every problem found. The dialog names the file path to edit, so end users get actionable guidance even if they didn't write the config themselves.
 
 ---
 
-## 6. Pattern C — Solo / manual install
+## 8. Step 6 — Install the application
 
-For individual administrators evaluating the tool, contributors, or environments without Intune.
+### 8.1 Pattern C — Solo install (manual)
 
-> ⏳ **Pending v1 release:** the MSIX install step and the first-run wizard are part of the v1 binary. Until that ships, the closest equivalent is to run the v1 legacy PowerShell script directly — see [`../legacy/README.md`](../legacy/README.md).
+For evaluation, a single admin's own machine, or environments without Intune:
 
-Anticipated flow once v1 ships:
+1. Build from source (see Section 9) or download the signed MSIX from the latest GitHub release.
+2. Install: double-click the `.msix` file (or `Add-AppxPackage -Path .\SharedMailboxTool.msix` from PowerShell). Windows installs the application.
+3. Create `%LOCALAPPDATA%\entra-shared-mailbox-manager\` (auto-created on first MSAL sign-in, but you can pre-create it).
+4. Drop your tenant `appsettings.json` (from Step 5) into that folder.
+5. Run `Install-Prerequisites.ps1` if you haven't already.
+6. Launch the app from the Start menu. Sign in.
 
-1. Download `SharedMailboxTool.msix` from the GitHub Releases page.
-2. Install: `Add-AppxPackage -Path .\SharedMailboxTool.msix`
-3. Launch the app from the Start menu.
-4. On first launch with no config present, the first-run wizard opens. Provide:
-    - Tenant ID
-    - Client ID of the Entra app registration (created per section 3.1)
-    - Optionally, a central config URL (for shared use across your own workstations)
-    - Or paste/edit role mappings directly into the per-user config the wizard writes.
-5. The wizard writes the config to `%AppData%\SharedMailboxTool\config.json` and proceeds to the main UI.
+### 8.2 Pattern B — Intune deployment
 
----
+For rolling out to multiple operators on managed devices:
 
-## 7. Updating configuration after initial deployment
+1. **Sign and package the MSIX.** See Section 9.2 for the signing options.
+2. **Upload the MSIX as a line-of-business app.** Intune admin center → **Apps → Windows → Add → Line-of-business app** → select the `.msix` or `.msixbundle` → assign to the target device group as **Required**.
+3. **Deploy the configuration script.** Author a small PowerShell script that writes the tenant `appsettings.json` to `%LOCALAPPDATA%\entra-shared-mailbox-manager\` for the logged-on user. A reference template is forthcoming as `scripts/Deploy-AppConfig.ps1`. Upload it as a Windows platform script targeted at the same device group, configured to **run using the logged-on credentials**.
+4. **Deploy `Install-Prerequisites.ps1`** as a separate Windows platform script if you haven't already.
+5. Wait for Intune to push everything to target devices (minutes to a few hours depending on tenant size).
+6. Operators sign in on first launch. MSAL caches the token; subsequent launches are silent.
 
-How you make changes after the initial deployment depends on which pattern you chose.
+### 8.3 Pattern A — SharePoint central configuration
 
-| Change | Pattern A | Pattern B | Pattern C |
-|---|---|---|---|
-| Add a new role | Edit `central-config.json` in SharePoint, save. Picked up on next launch. | Edit `Deploy-AppConfig.ps1`, reassign in Intune. | Edit `%AppData%\SharedMailboxTool\config.json`, restart app. |
-| Change a role's scope | Same | Same | Same |
-| Add a `SharedMail-` group | Same | Same | Same |
-| Change `tenantId` or `clientId` | Re-run section 4.4 with new bootstrap script | Same | Re-run first-run wizard |
-
-Pattern A's most appealing property is captured in the first three rows: edit JSON in a browser, save, done.
-
-### 7.1 Cache invalidation in Pattern A
-
-When the central config changes, running app instances pick it up the next time they launch. The configurable cache TTL (`configCacheTtlHours`, default 24h) controls how long a stale cache is acceptable if the SharePoint fetch fails on next launch. To force-refresh immediately on a specific device, delete `%LocalAppData%\SharedMailboxTool\central-config.cache.json` and relaunch the app.
+Deferred to v2.0. Tracking in [`Roadmap.md`](Roadmap.md). In v2.0, central role mapping and group definitions will live in a SharePoint document library and be edited in-browser without redeploying through Intune. For v1.0, role/group changes require a script redeployment.
 
 ---
 
-## 8. Verification and smoke tests
+## 9. Build from source
 
-After any deployment or config change, run these checks. They are quick and catch the vast majority of misconfigurations.
+For contributors or admins who prefer their own binaries instead of a published MSIX.
 
-### 8.1 Identity smoke test
-
-Sign in to the app as a user who is *not* a member of any `ROLE-` group. Expected: a clear "no roles assigned" empty-state message in the UI, no error dialog, no crash, no permission requests beyond the initial Graph consent.
-
-### 8.2 Scope-isolation smoke test
-
-Sign in as a member of a single `ROLE-` group, then attempt to manipulate a mailbox outside that role's scope (you can use the v1 PowerShell `Add-MailboxPermission` or the Admin Center, signed in as the same user). Expected: Exchange Online refuses the operation. *This validates the platform-enforced security layer.*
-
-### 8.3 Audit-export smoke test
-
-Run an audit against one mailbox the role covers. Expected: a CSV in `%LocalAppData%\SharedMailboxTool\logs\` matching the v1 filename pattern (`mailbox-audit-YYYYMMDD-HHMMSS.csv`), one row per trustee, with the expected columns (Mailbox, Trustee, DisplayName, AccountEnabled, SignInBlocked, FullAccess, SendAs, SendOnBehalf, LookupStatus).
-
-### 8.4 Bulk-grant dry-run smoke test
-
-Initiate a bulk grant against one `SharedMail-` group with one user. *Do not click Apply.* Expected: the preview pane shows the full (user × mailbox × permission) matrix, with rows annotated for "will add" vs "already present". Cancelling at this stage performs no writes.
-
----
-
-## 9. Troubleshooting
-
-### 9.1 "AADSTS65001: The user or administrator has not consented to use the application"
-
-Section 3.1 step 8 was not completed (admin consent). Return to the Entra admin center and grant consent.
-
-### 9.2 "AADSTS50194: Application is configured for use by Microsoft accounts only"
-
-Section 3.1 step 3: app registration was created with the wrong account-type setting. Change **Supported account types** to *Single tenant* (or *Multitenant* if intentional) and retry.
-
-### 9.3 Mailbox picker is empty for a user who should see mailboxes
-
-In order, check:
-
-1. The user is a member of at least one `ROLE-` group (`Get-MgUserMemberOf -UserId <upn>`).
-2. That group is present in the current config (`central-config.json` or local bootstrap).
-3. Mailboxes the role should cover are tagged with the expected `CustomAttribute1` value (`Get-Mailbox <mbx> | Select CustomAttribute1`).
-4. The user can `Get-Mailbox` against one of those mailboxes from PowerShell. If not, the Exchange RBAC role group from section 3.4 is misconfigured or the user isn't in the right Entra group.
-
-### 9.4 "Failed to fetch central config"
-
-The app falls back to the cached config (or to bootstrap-only). To diagnose:
-
-1. Confirm the URL in `bootstrap-config.json` resolves in a browser, signed in as the same user.
-2. Confirm the user has at least Read on the SharePoint library hosting the file.
-3. Confirm the file is named exactly as the URL references it (case-sensitive on SharePoint paths after the site path).
-4. Check the app's Serilog output at `%LocalAppData%\SharedMailboxTool\logs\app-YYYYMMDD.log` for the specific Graph error code returned.
-
-### 9.5 "Connect-ExchangeOnline" prompts repeatedly
-
-The Exchange Online module's token cache lives outside MSAL and has its own behaviour. On first run after install, a `Connect-ExchangeOnline` consent prompt is expected. If it recurs every launch, ensure the user's profile is not roaming-deleted between sessions (a domain policy issue, not an app issue).
-
-### 9.6 Intune script ran but no config file appeared
-
-Check Intune's script run status under **Devices** → **Scripts and remediations** → **(your script)** → **Device status**. Most common failures: the device is offline at check-in time (will retry on next sync), or PowerShell execution policy on the device blocks unsigned scripts (set the script to use 64-bit PowerShell, which uses LocalMachine policy rather than per-user).
-
----
-
-## 10. Uninstalling
-
-### 10.1 Remove the app
-
-If deployed via Intune: change the assignment from **Required** to **Uninstall** for the target user/device group. Intune will pull the MSIX and the app will be removed on next sync.
-
-If installed manually: `Get-AppxPackage *SharedMailboxTool* | Remove-AppxPackage`
-
-### 10.2 Remove the config and local state
+### 9.1 Build and run
 
 ```powershell
-Remove-Item -Path "$env:ProgramData\SharedMailboxTool" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item -Path "$env:AppData\SharedMailboxTool" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item -Path "$env:LocalAppData\SharedMailboxTool" -Recurse -Force -ErrorAction SilentlyContinue
+git clone https://github.com/JohnnyPitchfork/entra-shared-mailbox-manager.git
+cd entra-shared-mailbox-manager
+dotnet restore src/SharedMailboxTool/SharedMailboxTool.sln
+dotnet build src/SharedMailboxTool/SharedMailboxTool.sln -c Release
+dotnet test  src/SharedMailboxTool/SharedMailboxTool.sln -c Release
 ```
 
-### 10.3 Remove tenant-side artifacts
+The release build output is at `src/SharedMailboxTool/SharedMailbox.App/bin/Release/net8.0-windows/`. Run `SharedMailbox.App.exe` directly from there, or package as MSIX (Section 9.2).
 
-Only do this if you are decommissioning the tool entirely.
+### 9.2 Package and sign the MSIX
+
+MSIX packaging is added by the Windows Application Packaging Project in the solution. Sign with one of three options:
+
+- **Self-signed cert** — fastest path for internal testing. Generate via PowerShell, install the cert into "Trusted People" on each test machine (Intune can push this), sign the MSIX with it. Not production-grade but unblocks first end-to-end test.
+- **Real code-signing cert** — ~$200–500/year from a CA (DigiCert, Sectigo, etc.). Required for "verified publisher" status; recommended before rolling out to production operators.
+- **Unsigned + sideload override** — works on a developer machine in Developer Mode; not viable for Intune-managed devices.
+
+The choice is a deployment decision, not a code decision. The MSIX project is identical regardless of which cert you sign with.
+
+---
+
+## 10. Troubleshooting
+
+### "Configuration validation failed: AzureAd.TenantId is not a valid Guid"
+
+Launched the app before placing a real `appsettings.json` in `%LOCALAPPDATA%\entra-shared-mailbox-manager\`. Create the file per Section 7 and relaunch.
+
+### "Required PowerShell modules are not installed: ExchangeOnlineManagement, Microsoft.Graph"
+
+The runspace failed to import the modules. Re-run `Install-Prerequisites.ps1`. If install itself fails, check internet access to `www.powershellgallery.com`.
+
+### "AADSTS65001: The user or administrator has not consented to use the application"
+
+Admin consent wasn't granted for one of the `.All`-scope Graph permissions. Return to the app registration → API permissions blade → **Grant admin consent for {tenant}**.
+
+### "AADSTS50011: The redirect URI specified in the request does not match the redirect URIs configured for the application"
+
+`AzureAd.RedirectUri` in `appsettings.json` doesn't match what's configured under **Authentication → Mobile and desktop applications** in the app registration. The default is `http://localhost` on both sides — verify neither has drifted.
+
+### Sign-in completes but every action fails with "Access is denied"
+
+The signed-in user doesn't hold the Exchange admin role required for the operation. Verify role assignment per Step 2. Entra role changes can take up to an hour to propagate.
+
+### Sidebar shows "No mailbox groups are mapped to your roles"
+
+You configured `Roles` in `appsettings.json` but the signed-in user is in none of the `EntraGroupId` values listed there. Either add the user to one of those groups, or remove/empty the `Roles` array if you don't want filtering.
+
+### Sidebar shows "Could not determine your access: ..."
+
+`Get-MgUserMemberOf` failed during the role-resolution step. Most common cause: the user has revoked Graph consent or the Graph session expired. Sign out and back in.
+
+### App freezes during sign-in
+
+The MSAL system-browser flow is waiting on user interaction in the default browser. If the browser opened to a blank page, sign out of any conflicting tenants in the browser and retry. Last resort: delete `%LOCALAPPDATA%\entra-shared-mailbox-manager\msal_cache.bin` to force a clean re-auth.
+
+### CSV logs are missing
+
+CSV logs default to `%LOCALAPPDATA%\entra-shared-mailbox-manager\Logs\`. If the directory doesn't exist after a successful run, check `appsettings.json`'s `Logging.LogDirectory` — a rooted path overrides the default.
+
+---
+
+## 11. Updating
+
+For MSIX-deployed installations, Windows handles updates automatically once a new version is pushed to Intune. For manual installations, replace the package; configuration in `%LOCALAPPDATA%` is preserved across updates.
+
+The MSAL token cache (`msal_cache.bin`) and the CSV log directory survive uninstall by default.
+
+---
+
+## 12. Uninstalling
+
+### MSIX installations
+
+`Settings → Apps → Installed apps → SharedMail Tool → Uninstall`, or change the Intune assignment to **Uninstall** for the device group.
+
+### Manual installations
+
+`Get-AppxPackage *SharedMailboxTool* | Remove-AppxPackage`
+
+### Full clean uninstall (including config and cache)
 
 ```powershell
-# Entra app registration (use the Object ID from the Overview page).
-Connect-MgGraph -Scopes "Application.ReadWrite.All"
-Remove-MgApplication -ApplicationId "<object-id>"
-
-# Exchange RBAC primitives (one role's worth shown; repeat per role).
-Connect-ExchangeOnline
-Remove-RoleGroupMember -Identity "RoleGroup-SharedMail-PM-Managers" -Member "ROLE-ProjectManagers"
-Remove-RoleGroup -Identity "RoleGroup-SharedMail-PM-Managers"
-Remove-ManagementScope -Identity "Scope-SharedMail-PM"
-
-# The CustomAttribute1 tags on shared mailboxes are harmless to leave behind
-# but can be cleared if you wish:
-Get-Mailbox -RecipientTypeDetails SharedMailbox -ResultSize Unlimited |
-    Where-Object { $_.CustomAttribute1 -in @("PM","OPS","HR") } |
-    Set-Mailbox -CustomAttribute1 $null
+Remove-Item -Path "$env:LOCALAPPDATA\entra-shared-mailbox-manager\" -Recurse -Force -ErrorAction SilentlyContinue
 ```
 
-The SharePoint document library hosting `central-config.json` can be deleted from SharePoint directly, or left in place if you prefer to keep the history.
+### Revoking the Entra app registration
+
+Removing the app from machines does not revoke the app registration. To disable the application tenant-wide: Entra admin center → **Identity → Applications → Enterprise applications** → find the registration → **Properties → Enabled for users to sign in** → Off. Existing access tokens continue to work until they expire (up to one hour); cached refresh tokens become unusable immediately.
 
 ---
 
-## 11. Next steps after a successful deployment
+## 13. See also
 
-- Pin the app to the Start menu for your target users (Intune can do this via a Start menu layout policy).
-- Set a calendar reminder to review the `Receipts/` directory contents quarterly. They are the canonical record of what the tool was used for.
-- If you operate a SIEM, point an ingestor at `%LocalAppData%\SharedMailboxTool\logs\` to capture the Serilog JSON output.
-- Forward feedback and bug reports to the [project issues page](https://github.com/JohnnyPitchfork/entra-shared-mailbox-manager/issues) (once the v1 codebase ships).
-
----
-
-*This runbook will evolve alongside the v1 codebase. Any divergence between this document and observed tool behaviour is a documentation bug — please open an issue.*
+- [`Roadmap.md`](Roadmap.md) — version-by-version delivery plan. Use this to find which version a feature lands in.
+- [`Architecture.md`](Architecture.md) — design source-of-truth covering the security model, component layout, and the full-vision configuration architecture.
+- [`README.md`](../README.md) — project overview and feature summary.
+- [`Install-Prerequisites.ps1`](../scripts/Install-Prerequisites.ps1) — the module-install script.
