@@ -7,13 +7,13 @@
   IgnorableNamespaces="uap rescap">
 
   <Identity
-    Name="789e1738-145c-4c4c-a5ba-87b0d27345b2"
-    Publisher="CN=Jonpi"
+    Name="SharedMailboxManager.App"
+    Publisher="CN=Shared Mailbox Manager"
     Version="1.0.0.0" />
 
   <Properties>
-    <DisplayName>SharedMailbox.Package</DisplayName>
-    <PublisherDisplayName>Jonpi</PublisherDisplayName>
+    <DisplayName>Shared Mailbox Manager</DisplayName>
+    <PublisherDisplayName>Shared Mailbox Manager</PublisherDisplayName>
     <Logo>Images\StoreLogo.png</Logo>
   </Properties>
 
@@ -31,13 +31,18 @@
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
-        DisplayName="SharedMailbox.Package"
-        Description="SharedMailbox.Package"
+        DisplayName="Shared Mailbox Manager"
+        Description="Manage Microsoft 365 shared mailbox delegations across teams."
         BackgroundColor="transparent"
         Square150x150Logo="Images\Square150x150Logo.png"
         Square44x44Logo="Images\Square44x44Logo.png">
-        <uap:DefaultTile Wide310x150Logo="Images\Wide310x150Logo.png" />
+        <uap:DefaultTile Wide310x150Logo="Images\Wide310x150Logo.png"  ShortName="Shared Mailbox" Square71x71Logo="Images\SmallTile.png" Square310x310Logo="Images\LargeTile.png">
+          <uap:ShowNameOnTiles>
+            <uap:ShowOn Tile="square150x150Logo"/>
+          </uap:ShowNameOnTiles>
+        </uap:DefaultTile >
         <uap:SplashScreen Image="Images\SplashScreen.png" />
+        <uap:LockScreen BadgeLogo="Images\BadgeLogo.png" Notification="badgeAndTileText"/>
       </uap:VisualElements>
     </Application>
   </Applications>
