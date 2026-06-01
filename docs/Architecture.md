@@ -244,8 +244,8 @@ The app resolves configuration from a tiered set of locations, with explicit pre
 | Tier | Location | Scope | Typical contents |
 |---|---|---|---|
 | 1. Central cloud config | SharePoint Online document library (read via Graph) | Tenant-wide | Role-to-scope mapping, list of `SharedMail-` groups, audit policy settings |
-| 2. Machine-wide bootstrap | `%ProgramData%\SharedMailboxTool\config.json` | Per-device | `TenantId`, `ClientId`, `CentralConfigUrl`, optional Pattern B fallback |
-| 3. Per-user config | `%AppData%\SharedMailboxTool\config.json` | Per-user | UI preferences, last-used group, local override for power users |
+| 2. Machine-wide bootstrap | `%ProgramData%\entra-shared-mailbox-manager\config.json` | Per-device | `TenantId`, `ClientId`, `CentralConfigUrl`, optional Pattern B fallback |
+| 3. Per-user config | `%AppData%\entra-shared-mailbox-manager\config.json` | Per-user | UI preferences, last-used group, local override for power users |
 
 > [!NOTE]
 > **v1.0 status:** v1.0 ships a two-tier model with simpler paths:

@@ -256,7 +256,7 @@ If any required value is missing, the app refuses to start with a "Configuration
 For evaluation, a single admin's own machine, or environments without Intune:
 
 1. Build from source (see Section 9) or download the signed MSIX from the latest GitHub release.
-2. Install: double-click the `.msix` file (or `Add-AppxPackage -Path .\SharedMailboxTool.msix` from PowerShell). Windows installs the application.
+2. Install: double-click the `.msix` file (or `Add-AppxPackage -Path .\SharedMailbox.Package_*.msix` from PowerShell). Windows installs the application.
 3. Create `%LOCALAPPDATA%\entra-shared-mailbox-manager\` (auto-created on first MSAL sign-in, but you can pre-create it).
 4. Drop your tenant `appsettings.json` (from Step 5) into that folder.
 5. Run `Install-Prerequisites.ps1` if you haven't already.
@@ -288,12 +288,12 @@ For contributors or admins who prefer their own binaries instead of a published 
 ```powershell
 git clone https://github.com/JohnnyPitchfork/entra-shared-mailbox-manager.git
 cd entra-shared-mailbox-manager
-dotnet restore src/SharedMailboxTool/SharedMailboxTool.sln
-dotnet build src/SharedMailboxTool/SharedMailboxTool.sln -c Release
-dotnet test  src/SharedMailboxTool/SharedMailboxTool.sln -c Release
+dotnet restore src/SharedMailboxTool.sln
+dotnet build src/SharedMailboxTool.sln -c Release
+dotnet test  src/SharedMailboxTool.sln -c Release
 ```
 
-The release build output is at `src/SharedMailboxTool/SharedMailbox.App/bin/Release/net8.0-windows/`. Run `SharedMailbox.App.exe` directly from there, or package as MSIX (Section 9.2).
+The release build output is at `src/SharedMailbox.App/bin/Release/net8.0-windows/`. Run `SharedMailbox.App.exe` directly from there, or package as MSIX (Section 9.2).
 
 ### 9.2 Package and sign the MSIX
 
@@ -359,11 +359,11 @@ The MSAL token cache (`msal_cache.bin`) and the CSV log directory survive uninst
 
 ### MSIX installations
 
-`Settings → Apps → Installed apps → SharedMail Tool → Uninstall`, or change the Intune assignment to **Uninstall** for the device group.
+`Settings → Apps → Installed apps → Shared Mailbox Manager → Uninstall`, or change the Intune assignment to **Uninstall** for the device group.
 
 ### Manual installations
 
-`Get-AppxPackage *SharedMailboxTool* | Remove-AppxPackage`
+`Get-AppxPackage *SharedMailboxManager* | Remove-AppxPackage`
 
 ### Full clean uninstall (including config and cache)
 

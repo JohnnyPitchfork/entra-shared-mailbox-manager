@@ -63,8 +63,8 @@ v1.0 supports Patterns B and C. Pattern A — and the **Config Builder** compani
 The flow:
 
 ```text
-1. Download the latest SharedMailboxTool.msix from the GitHub Releases page,
-   or build from source.
+1. Download the latest SharedMailbox.Package_*.msix from the GitHub Releases
+   page, or build from source.
 2. Install the MSIX (double-click, or Add-AppxPackage on Windows 10/11).
 3. Drop a tenant-specific appsettings.json into
    %LOCALAPPDATA%\entra-shared-mailbox-manager\ — minimum required values
@@ -116,13 +116,15 @@ entra-shared-mailbox-manager/
 │   │                                reference; tenant data redacted).
 │   ├── UserUPN.csv                  CSV template for the v1 bulk-grant flow.
 │   └── README.md                    Origin story and v1 capability summary.
-├── src/SharedMailboxTool/    Visual Studio solution:
+├── src/                      Visual Studio solution (SharedMailboxTool.sln):
 │   ├── SharedMailbox.Core           Domain types, service interfaces, CSV
 │   │                                writer, UPN reader. No external deps.
 │   ├── SharedMailbox.PowerShell     EXO + Graph adapter (hosted PS runspace).
 │   ├── SharedMailbox.App            WPF main application (MSAL + WPF-UI +
 │   │                                CommunityToolkit.Mvvm).
 │   ├── SharedMailbox.Tests          xUnit test suite (~75 tests).
+│   ├── SharedMailbox.Package        MSIX packaging project (.wapproj) —
+│   │                                produces the signed Intune-deployable .msix.
 │   └── SharedMailbox.ConfigBuilder  (v2.0) WPF companion app for tenant
 │                                    setup automation.
 ├── scripts/

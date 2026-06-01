@@ -1,0 +1,36 @@
+<Project>
+
+  <!--
+    Solution-wide MSBuild properties. Picked up automatically by every
+    project under this directory.
+
+    NOTE on build output paths: this file previously redirected all build
+    output to .artifacts/ at the repo root via <ArtifactsPath> to dodge
+    Windows' 260-char MAX_PATH limit (the Microsoft.PowerShell.SDK package
+    fans out deeply-nested runtime folders that overflow when combined with
+    our src/<project>/bin/<configuration>/... layout).
+
+    The ArtifactsPath approach turned out to be incompatible with the
+    Windows Application Packaging Project (.wapproj) used by
+    SharedMailbox.Package — the wapproj's restore/publish targets assume
+    conventional in-project obj/ paths and silently fail to generate
+    wappublish/<rid>/project.assets.json under the redirected layout,
+    breaking MSIX publish.
+
+    Resolution: long-path support is enabled at the OS level via:
+        Set-ItemProperty `
+          -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" `
+          -Name LongPathsEnabled -Value 1 -Type DWord
+    This is a one-time per-machine setting documented in docs/Setup.md.
+    With long paths enabled, conventional in-project obj/bin layouts
+    work fine and the wapproj is happy.
+
+    If a future contributor reintroduces ArtifactsPath, expect MSIX
+    publish to fail with "wappublish/win-x64/project.assets.json not found".
+  -->
+
+  <PropertyGroup>
+    <!-- intentionally empty; see comment above -->
+  </PropertyGroup>
+
+</Project>

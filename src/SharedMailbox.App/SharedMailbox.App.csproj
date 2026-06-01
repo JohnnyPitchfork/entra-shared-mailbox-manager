@@ -6,6 +6,18 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <!-- Declared so NuGet restore generates win-x64 assets and the
+         MSIX packaging project can build a win-x64 publish output.
+         Platforms must also include x64 so the wapproj's invocation of
+         this project's Publish target with Platform=x64 resolves cleanly. -->
+    <Platforms>AnyCPU;x64</Platforms>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <!-- Opt into the C# interceptors language feature scoped to Microsoft's
+         configuration binder source generator. Required when consuming
+         Microsoft.Extensions.Configuration.Binder 8.0+ (transitively pulled
+         in by Microsoft.Extensions.Configuration.Json). Without this, the
+         compiler rejects the generator's emitted [InterceptsLocation] calls. -->
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.Extensions.Configuration.Binder.SourceGeneration</InterceptorsNamespaces>
   </PropertyGroup>
 
   <ItemGroup>

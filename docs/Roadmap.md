@@ -40,7 +40,7 @@ The minimum viable product. Covers everything the legacy PowerShell script did, 
 - **Role-to-scope filtering** — the tool-side half of Architecture.md's dual-layer security model. Each role is an Entra security group of users; each role is mapped to one or more SharedMail- groups it can administer. At sign-in, the sidebar filters to only the groups the user holds a role for. Users in no mapped role see an empty state with a clear message instead of every group in the tenant.
 - **MSIX packaging** — the path from "runs on dev box" to "deployable via Intune." Adds a Windows Application Packaging Project to the solution and configures signing.
 - **Documentation reconciliation** — `Setup.md`, `Architecture.md`, and `README.md` updated to honestly reflect what ships in v1.0 versus what's deferred.
-- **Release hygiene** — `LICENSE` verification, folder-name reconciliation (the codebase currently uses `entra-shared-mailbox-manager` for the `%LOCALAPPDATA%` folder, the docs use `SharedMailboxTool`; one will win), redundant `<Folder Include>` csproj entries cleaned up.
+- **Release hygiene** — `LICENSE` verification, redundant `<Folder Include>` csproj entries cleaned up. (The internal `src/SharedMailboxTool/` folder was collapsed to just `src/` during MSIX packaging to keep paths under Windows' MAX_PATH limit; `entra-shared-mailbox-manager` is now the single canonical name across repo, install dir, and `%LOCALAPPDATA%`.)
 
 **Deliberately deferred from v1.0:**
 
